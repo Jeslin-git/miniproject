@@ -1,88 +1,89 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-// Scene setup
+/* ======================
+   SCENE SETUP
+====================== */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb); // Sky blue
+scene.background = new THREE.Color(0x87ceeb);
 
-// Camera setup
 const camera = new THREE.PerspectiveCamera(
-    75,                                   // Field of view
-    window.innerWidth / window.innerHeight, // Aspect ratio
-    0.1,                                  // Near plane
-    1000                                  // Far plane
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
 );
-camera.position.set(0, 2, 5); // Position camera above and back
+camera.position.set(0, 2, 5);
 
-// Renderer setup
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true; // Enable shadows
+renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; // Smooth movement
-controls.dampingFactor = 0.05;
-controls.maxPolarAngle = Math.PI / 2; // Prevent going below ground
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI / 2;
 
-// Lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambientLight);
+/* ======================
+   LIGHTING
+====================== */
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(5, 10, 5);
-directionalLight.castShadow = true;
-scene.add(directionalLight);
+const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+sunLight.position.set(10, 20, 10);
+sunLight.castShadow = true;
+scene.add(sunLight);
 
-// Ground plane
-const groundGeometry = new THREE.PlaneGeometry(20, 20);
-const groundMaterial = new THREE.MeshStandardMaterial({ 
-    color: 0x228b22, // Forest green
-    roughness: 0.8 
-});
-const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+scene.add(new THREE.HemisphereLight(0x87ceeb, 0x228b22, 0.3));
+
+/* ======================
+   GROUND
+====================== */
+const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshStandardMaterial({ color: 0x228b22, roughness: 0.8 })
+);
+ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Test cube
-// const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-// const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff6347 }); // Tomato red
-// const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-// cube.position.y = 0.5; // Place on ground
-// cube.castShadow = true;
-// scene.add(cube);
+/* ======================
+   OBJECT MANAGEMENT
+====================== */
+const sceneObjects = [];
 
-// spawn cubes dynamically
+function spawnObject(type = 'cube', x = 0, y = 0.5, z = 0, color = 0xff6347) {
+    let geometry;
 
-// Object storage
-const sceneObjects = []; // Keep track of spawned objects
+    switch (type) {
+        case 'cube':
+            geometry = new THREE.BoxGeometry(1, 1, 1);
+            break;
+        case 'sphere':
+            geometry = new THREE.SphereGeometry(0.5, 32, 32);
+            break;
+        case 'cylinder':
+            geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+            break;
+        default:
+            console.error('Unknown object type:', type);
+            return;
+    }
 
-/**
- * Spawns a cube at specified position
- * @param {number} x - X coordinate
- * @param {number} y - Y coordinate (height)
- * @param {number} z - Z coordinate
- * @param {number} color - Hex color (e.g., 0xff0000 for red)
- */
-function spawnCube(x = 0, y = 0.5, z = 0, color = 0xff6347) {
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshStandardMaterial({ color: color });
-    const cube = new THREE.Mesh(geometry, material);
-    
-    cube.position.set(x, y, z);
-    cube.castShadow = true;
-    
-    scene.add(cube);
-    sceneObjects.push(cube);
-    
-    console.log(`Cube spawned at (${x}, ${y}, ${z})`);
-    
-    return cube;
+    const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({ color })
+    );
+
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.userData.type = type;
+
+    scene.add(mesh);
+    sceneObjects.push(mesh);
+
+    console.log(`${type} spawned at`, mesh.position);
 }
-
-// Expose function globally so other files can use it
-window.spawnCube = spawnCube;
 
 function clearScene() {
     sceneObjects.forEach(obj => {
@@ -94,50 +95,63 @@ function clearScene() {
     console.log('Scene cleared');
 }
 
+window.spawnObject = spawnObject;
 window.clearScene = clearScene;
 
-// Custom event system for voice commands
+/* ======================
+   VOICE COMMAND HANDLER
+====================== */
 window.addEventListener('VOICE_COMMAND', (event) => {
-    const command = event.detail.command;
-    const params = event.detail.params || {};
-    
-    console.log('Received command:', command, params);
-    
+    const { command, params = {} } = event.detail;
+    console.log('Voice command:', command, params);
     handleVoiceCommand(command, params);
 });
 
 function handleVoiceCommand(command, params) {
-    switch(command) {
+    switch (command) {
+
         case 'PLACE_CUBE':
-            spawnCube(
-                params.x || 0,
-                params.y || 0.5,
-                params.z || 0,
-                params.color || 0xff6347
+            spawnObject(
+                'cube',
+                params.x ?? 0,
+                params.y ?? 0.5,
+                params.z ?? 0,
+                params.color ?? 0xff6347
             );
             break;
-            
+
+        case 'PLACE_OBJECT':
+            spawnObject(
+                params.type ?? 'cube',
+                params.x ?? 0,
+                params.y ?? 0.5,
+                params.z ?? 0,
+                params.color ?? 0xff6347
+            );
+            break;
+
         case 'CLEAR_SCENE':
             clearScene();
             break;
-            
+
         default:
             console.warn('Unknown command:', command);
     }
 }
 
-// Animation loop
+/* ======================
+   ANIMATION LOOP
+====================== */
 function animate() {
     requestAnimationFrame(animate);
-    
-    controls.update(); // Required for damping
-    
+    controls.update();
     renderer.render(scene, camera);
 }
-
 animate();
 
-// Handle window resize
+/* ======================
+   RESIZE HANDLER
+====================== */
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
