@@ -1,0 +1,155 @@
+:root {
+    --bg-main: #0a0a0a;
+    --panel-glass: rgba(25, 25, 25, 0.85);
+    --accent-cyan: #00f2ff;
+    --accent-red: #ff4b2b;
+}
+
+body, html {
+    margin: 0; padding: 0;
+    background: var(--bg-main);
+    color: #fff; font-family: 'Inter', sans-serif;
+    height: 100vh; overflow: hidden;
+}
+
+#editor-window {
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column;
+}
+
+.window-header {
+    background: #1d1d1d; padding: 12px 20px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid #333; z-index: 10;
+}
+
+.ar-badge {
+    background: var(--accent-red); color: white; border: none;
+    padding: 6px 18px; border-radius: 20px; font-weight: 600; cursor: pointer;
+}
+
+/* Main Layout */
+.main-container { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+.sidebar, #property-panel {
+    width: 250px; background: var(--panel-glass);
+    backdrop-filter: blur(10px); padding: 15px;
+    display: flex; flex-direction: column; z-index: 5;
+}
+
+.sidebar { border-right: 1px solid #333; }
+#property-panel { border-left: 1px solid #333; }
+
+.viewport { flex: 1; position: relative; z-index: 1; }
+#three-canvas { width: 100% !important; height: 100% !important; display: block; }
+
+/* Dropdown & Grid Logic */
+.category-header {
+    width: 100%; background: rgba(255,255,255,0.05); border: none;
+    color: #fff; padding: 12px; text-align: left; cursor: pointer;
+    display: flex; justify-content: space-between; border-radius: 8px; margin-bottom: 5px;
+}
+
+.dropdown-content {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.4s ease-out;
+}
+
+.dropdown-content.open { max-height: 500px; margin-bottom: 10px; }
+
+.model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+.grid-item {
+    background: #222; aspect-ratio: 1; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; border: 2px solid transparent; transition: 0.3s;
+    opacity: 0; transform: translateY(10px);
+    animation: fadeInItem 0.4s ease forwards;
+    animation-delay: calc(var(--i) * 0.1s);
+}
+
+@keyframes fadeInItem { to { opacity: 1; transform: translateY(0); } }
+
+.grid-item:hover { background: #333; border-color: var(--accent-cyan); transform: scale(1.05); }
+
+/* Property Panel Details */
+.panel-header { display: flex; justify-content: space-between; align-items: center; color: var(--accent-cyan); margin-bottom: 20px; }
+#close-prop-btn { background: none; border: none; color: #666; font-size: 22px; cursor: pointer; }
+#close-prop-btn:hover { color: #fff; }
+
+.prop-group label { display: block; font-size: 10px; color: #888; margin-bottom: 8px; text-transform: uppercase; }
+input[type="range"] { width: 100%; accent-color: var(--accent-cyan); }
+
+#delete-obj-btn { margin-top: auto; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; padding: 10px; border-radius: 6px; cursor: pointer; }
+
+/* Voice UI */
+#mic-trigger {
+    position: absolute; bottom: 80px; right: 30px; 
+    width: 65px; height: 65px; border-radius: 50%;
+    background: var(--accent-cyan); border: none; font-size: 28px; cursor: pointer;
+    box-shadow: 0 0 20px rgba(0, 242, 255, 0.4); z-index: 20;
+}
+
+#voice-popup {
+    position: absolute; bottom: 160px; left: 50%; transform: translateX(-50%);
+    width: 300px; background: rgba(10, 15, 20, 0.95); border: 1px solid var(--accent-cyan);
+    border-radius: 16px; padding: 20px; text-align: center; z-index: 20;
+}
+
+.pulse-ring {
+    width: 50px; height: 50px; border: 2px solid var(--accent-cyan);
+    border-radius: 50%; margin: 0 auto 10px; animation: ripple 1.5s infinite;
+}
+
+@keyframes ripple { 0% { transform: scale(0.8); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+
+/* Status Bar */
+#status-bar { background: #111; height: 35px; border-top: 1px solid #333; display: flex; justify-content: space-between; padding: 0 20px; align-items: center; font-size: 11px; color: #888; }
+.hidden { display: none !important; }
+
+/* --- CLEAN RECTANGLE FOR COMING SOON --- */
+.coming-soon-box {
+    padding: 24px 15px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    /* Solid thin border for a premium feel */
+    border: 1px solid rgba(255, 255, 255, 0.1); 
+    border-radius: 4px; /* Sharper corners look cleaner */
+    margin: 10px 0;
+}
+
+.coming-soon-box p {
+    font-size: 11px;
+    color: var(--accent-cyan);
+    margin: 0 0 4px 0;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.coming-soon-box span {
+    font-size: 10px;
+    color: #555;
+    font-style: italic;
+}
+
+/* --- ICON GLOW EFFECT --- */
+.grid-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.grid-item.selected {
+    background: rgba(0, 242, 255, 0.1); /* Subtle cyan tint */
+    border: 1px solid var(--accent-cyan);
+    /* Outer box glow */
+    box-shadow: 0 0 20px rgba(0, 242, 255, 0.4), inset 0 0 10px rgba(0, 242, 255, 0.2);
+    transform: scale(1.05);
+}
+
+/* Makes the emoji itself glow */
+.grid-item.selected .icon-wrapper, 
+.grid-item.selected .icon-box {
+    filter: drop-shadow(0 0 8px var(--accent-cyan));
+}
