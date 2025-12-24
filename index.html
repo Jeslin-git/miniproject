@@ -1,15 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice AR System</title>
     <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
     </style>
 </head>
+
 <body>
+    <div style="position: absolute; top: 10px; left: 10px; z-index: 100;">
+        <button onclick="window.spawnCube(0, 0.5, 0, 0xff0000)">Spawn Red</button>
+        <button onclick="window.spawnCube(2, 0.5, 0, 0x00ff00)">Spawn Green</button>
+        <button onclick="window.spawnCube(-2, 0.5, 0, 0x0000ff)">Spawn Blue</button>
+        <button onclick="window.clearScene()">Clear All</button>
+    </div>
     <script type="module" src="/main.js"></script>
 </body>
+
 </html>
