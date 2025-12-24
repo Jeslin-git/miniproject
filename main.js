@@ -96,6 +96,36 @@ function clearScene() {
 
 window.clearScene = clearScene;
 
+// Custom event system for voice commands
+window.addEventListener('VOICE_COMMAND', (event) => {
+    const command = event.detail.command;
+    const params = event.detail.params || {};
+    
+    console.log('Received command:', command, params);
+    
+    handleVoiceCommand(command, params);
+});
+
+function handleVoiceCommand(command, params) {
+    switch(command) {
+        case 'PLACE_CUBE':
+            spawnCube(
+                params.x || 0,
+                params.y || 0.5,
+                params.z || 0,
+                params.color || 0xff6347
+            );
+            break;
+            
+        case 'CLEAR_SCENE':
+            clearScene();
+            break;
+            
+        default:
+            console.warn('Unknown command:', command);
+    }
+}
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
