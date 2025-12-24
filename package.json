@@ -1,0 +1,24 @@
+{
+  "name": "miniproject",
+  "version": "1.0.0",
+  "description": "",
+  "main": "Three.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jeslin-git/miniproject.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Jeslin-git/miniproject/issues"
+  },
+  "homepage": "https://github.com/Jeslin-git/miniproject#readme",
+  "dependencies": {
+    "three": "^0.182.0",
+    "vite": "^7.3.0"
+  }
+}
