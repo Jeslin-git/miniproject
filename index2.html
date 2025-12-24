@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAR Dev App Phase One</title>
+    <link rel="stylesheet" href="/src/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="editor-window">
+        <header class="window-header">
+            <div class="title">WebAR Dev App - UI Mockup</div>
+            <button class="ar-badge">LIVE AR</button>
+        </header>
+
+        <div class="main-container">
+            <aside class="sidebar">
+                <div class="search-box">
+                    <input type="text" placeholder="Search Models..." id="main-search">
+                </div>
+                
+                <div class="category-container">
+                    <button class="category-header" id="furniture-toggle">
+                        FURNITURE <span class="arrow">⌄</span>
+                    </button>
+                    <div class="dropdown-content" id="furniture-grid">
+                        <div class="model-grid">
+                            <div class="grid-item" data-type="table" style="--i:1">
+                                <div class="icon-wrapper">🏁</div>
+                                <span>Table</span>
+                            </div>
+                            <div class="grid-item" data-type="chair" style="--i:2">
+                                <div class="icon-wrapper">🪑</div>
+                                <span>Chair</span>
+                            </div>
+                            <div class="grid-item" data-type="sofa" style="--i:3">
+                                <div class="icon-wrapper">🛋️</div>
+                                <span>Sofa</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="category-container">
+                    <button class="category-header" id="vehicles-toggle">
+                        VEHICLES <span class="arrow">⌄</span>
+                    </button>
+                    <div class="dropdown-content" id="vehicles-grid">
+                        <div class="coming-soon-box">
+                            <p>Coming Soon</p>
+                            <span>Week 4 Update</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-footer">
+                    <button class="icon-btn" id="save-btn" title="Download JSON">💾</button>
+                    <button class="icon-btn">⚙️</button>
+                    <button class="icon-btn">❓</button>
+                </div>
+            </aside>
+
+            <main class="viewport" id="viewport-container">
+                <canvas id="three-canvas"></canvas>
+                <button id="mic-trigger">🎙️</button>
+                
+                <div id="voice-popup" class="hidden">
+                    <div class="mic-visual">
+                        <div class="pulse-ring"></div>
+                        <div class="mic-display">🎙️</div>
+                    </div>
+                    <p id="command-display">Listening...</p>
+                </div>
+            </main>
+
+            <aside id="property-panel" class="hidden">
+                <div class="panel-header">
+                    <span>PROPERTIES</span>
+                    <button id="close-prop-btn">×</button>
+                </div>
+                <div class="prop-group">
+                    <label>Object Height</label>
+                    <input type="range" id="prop-height" min="0.1" max="3" step="0.1" value="1">
+                </div>
+                <div class="prop-group">
+                    <label>Object Width</label>
+                    <input type="range" id="prop-width" min="0.1" max="5" step="0.1" value="1">
+                </div>
+                <div class="prop-group">
+                    <label>Color</label>
+                    <input type="color" id="prop-color" value="#ffffff">
+                </div>
+                <button id="delete-obj-btn">DELETE OBJECT</button>
+            </aside>
+        </div>
+
+        <footer id="status-bar">
+            <div class="status-item">System: <span id="system-status">Ready</span></div>
+            <div class="status-item">Objects: <span id="object-count">0</span></div>
+            <div class="status-item">Mode: <span id="current-mode">Editor</span></div>
+        </footer>
+    </div>
+    <script type="module" src="/src/main2.js"></script>
+</body>
+</html>
