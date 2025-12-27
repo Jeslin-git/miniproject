@@ -98,3 +98,6 @@ recognition.onend = () => { // Handle end of recognition
 else {
     console.log("Speech recognition is not supported in this browser.");
 }
+
+
+export { split, parseClause, recognition };

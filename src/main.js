@@ -1,7 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/controls/OrbitControls.js';
 import { createTable, createChair } from './generators.js';
+import { initVoiceRecognition, parseVoiceCommand } from './voiceParser.js';
+import { recognition } from './voice.js';
 
+// Your mic button handler
+micBtn.onclick = () => {
+    voicePopup.classList.remove('hidden');
+    cmdDisplay.innerText = "Listening...";
+    
+    recognition.start();
+};
 // --- 1. CORE SETUP ---
 const scene = new THREE.Scene();
 const viewport = document.getElementById('viewport-container');
@@ -61,33 +70,52 @@ setupDropdown('vehicles-toggle', 'vehicles-grid');
 // --- 4. SPAWNING LOGIC ---
 const spawnObject = (type) => {
     let model;
-    if (type === 'table') model = createTable(1.5, 0.8, 0.8);
-    else if (type === 'chair') model = createChair(0.7);
-    else {
+    // Normalize the type (handle variations)
+    const normalizedType = type.toLowerCase().trim();
+    
+    if (normalizedType === 'table') {
+        model = createTable(1.5, 0.8, 0.8);
+    } else if (normalizedType === 'chair') {
+        model = createChair(0.7);
+    } else if (normalizedType === 'sofa' || normalizedType === 'couch') {
+        // Create a simple sofa (wider chair-like object)
         model = new THREE.Group();
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
+        const sofaMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+        const sofaGeom = new THREE.BoxGeometry(2, 0.8, 1);
+        const sofa = new THREE.Mesh(sofaGeom, sofaMaterial);
+        sofa.position.y = 0.4;
+        model.add(sofa);
+        model.userData.type = 'sofa';
+    } else {
+        // Default fallback object
+        model = new THREE.Group();
+        const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1), 
+            new THREE.MeshStandardMaterial({ color: 0xff4b2b })
+        );
         mesh.position.y = 0.5;
         model.add(mesh);
+        model.userData.type = normalizedType || 'object';
     }
 
-    model.userData.type = type;
+    if (!model.userData.type) {
+        model.userData.type = normalizedType || type;
+    }
+    
     model.position.set(Math.random() * 4 - 2, 0, Math.random() * 4 - 2);
     scene.add(model);
     placedObjects.push(model);
-    updateStatus(`Generated ${type}`);
+    updateStatus(`Generated ${model.userData.type}`);
+    
+    return model;
 };
 
-// UPDATED: Icon Selection with Glow Logic
+// Icon Selection with Glow Logic
 document.querySelectorAll('.grid-item').forEach(item => {
     item.addEventListener('click', (e) => {
         e.stopPropagation();
-        
-        // Remove glow from all other sidebar icons
         document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('selected'));
-        
-        // Add glow to clicked sidebar icon
         item.classList.add('selected');
-        
         spawnObject(item.dataset.type);
     });
 });
@@ -107,7 +135,6 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
         
         selectedObject = root;
         
-        // Apply 3D Glow Highlight
         deselectAll3D();
         selectedObject.traverse(child => {
             if (child.isMesh) {
@@ -122,7 +149,6 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
         selectedObject = null;
         deselectAll3D();
         document.getElementById('property-panel').classList.add('hidden');
-        // Clear sidebar icon selection when clicking into empty space
         document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('selected'));
         updateStatus("Ready");
     }
@@ -134,10 +160,23 @@ document.getElementById('close-prop-btn').onclick = () => {
     selectedObject = null;
 };
 
-document.getElementById('prop-height').oninput = (e) => { if(selectedObject) selectedObject.scale.y = e.target.value; };
-document.getElementById('prop-width').oninput = (e) => { if(selectedObject) { selectedObject.scale.x = e.target.value; selectedObject.scale.z = e.target.value; }};
+document.getElementById('prop-height').oninput = (e) => { 
+    if(selectedObject) selectedObject.scale.y = e.target.value; 
+};
+
+document.getElementById('prop-width').oninput = (e) => { 
+    if(selectedObject) { 
+        selectedObject.scale.x = e.target.value; 
+        selectedObject.scale.z = e.target.value; 
+    }
+};
+
 document.getElementById('prop-color').oninput = (e) => {
-    if(selectedObject) selectedObject.traverse(c => { if(c.isMesh) c.material.color.set(e.target.value); });
+    if(selectedObject) {
+        selectedObject.traverse(c => { 
+            if(c.isMesh) c.material.color.set(e.target.value); 
+        });
+    }
 };
 
 document.getElementById('delete-obj-btn').onclick = () => {
@@ -150,21 +189,78 @@ document.getElementById('delete-obj-btn').onclick = () => {
     }
 };
 
-// --- 6. VOICE SYSTEM ---
+// --- 6. REAL VOICE SYSTEM ---
 const micBtn = document.getElementById('mic-trigger');
 const voicePopup = document.getElementById('voice-popup');
 const cmdDisplay = document.getElementById('command-display');
 
+let recognition = null;
+
+// Initialize voice recognition
+try {
+    recognition = initVoiceRecognition(
+        // onResult callback
+        (transcript, commands) => {
+            console.log('Transcript:', transcript);
+            console.log('Commands:', commands);
+            
+            cmdDisplay.innerText = `You said: "${transcript}"`;
+            
+            // Process each command
+            let processed = false;
+            commands.forEach(cmd => {
+                if (cmd.action === 'insert' && cmd.object) {
+                    spawnObject(cmd.object);
+                    processed = true;
+                } else if (cmd.action === 'delete') {
+                    if (selectedObject) {
+                        scene.remove(selectedObject);
+                        placedObjects = placedObjects.filter(o => o !== selectedObject);
+                        selectedObject = null;
+                        processed = true;
+                    }
+                } else if (cmd.action === 'clear') {
+                    placedObjects.forEach(obj => scene.remove(obj));
+                    placedObjects = [];
+                    processed = true;
+                }
+            });
+            
+            if (!processed) {
+                cmdDisplay.innerText = `Couldn't understand: "${transcript}"`;
+            }
+            
+            setTimeout(() => voicePopup.classList.add('hidden'), 2000);
+        },
+        // onError callback
+        (error) => {
+            console.error('Voice recognition error:', error);
+            cmdDisplay.innerText = `Error: ${error}`;
+            setTimeout(() => voicePopup.classList.add('hidden'), 2000);
+        }
+    );
+} catch (error) {
+    console.error('Failed to initialize voice recognition:', error);
+}
+
 micBtn.onclick = () => {
+    if (!recognition) {
+        cmdDisplay.innerText = "Voice not supported in this browser";
+        voicePopup.classList.remove('hidden');
+        setTimeout(() => voicePopup.classList.add('hidden'), 2000);
+        return;
+    }
+    
     voicePopup.classList.remove('hidden');
     cmdDisplay.innerText = "Listening...";
-    setTimeout(() => {
-        const choices = ['table', 'chair', 'sofa'];
-        const choice = choices[Math.floor(Math.random() * choices.length)];
-        spawnObject(choice);
-        cmdDisplay.innerText = `Placed ${choice.toUpperCase()}`;
-        setTimeout(() => voicePopup.classList.add('hidden'), 1500);
-    }, 2000);
+    
+    try {
+        recognition.start();
+    } catch (error) {
+        console.error('Failed to start recognition:', error);
+        cmdDisplay.innerText = "Failed to start listening";
+        setTimeout(() => voicePopup.classList.add('hidden'), 2000);
+    }
 };
 
 // --- 7. SAVE SYSTEM ---
@@ -182,7 +278,7 @@ document.getElementById('save-btn').onclick = () => {
     updateStatus("Scene Exported");
 };
 
-// --- 8. LOOP ---
+// --- 8. ANIMATION LOOP ---
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
