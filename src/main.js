@@ -1,16 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/controls/OrbitControls.js';
 import { createTable, createChair } from './generators.js';
-import { initVoiceRecognition, parseVoiceCommand } from './voiceParser.js';
-import { recognition } from './voice.js';
 
-// Your mic button handler
-micBtn.onclick = () => {
-    voicePopup.classList.remove('hidden');
-    cmdDisplay.innerText = "Listening...";
-    
-    recognition.start();
-};
 // --- 1. CORE SETUP ---
 const scene = new THREE.Scene();
 const viewport = document.getElementById('viewport-container');
@@ -70,7 +61,6 @@ setupDropdown('vehicles-toggle', 'vehicles-grid');
 // --- 4. SPAWNING LOGIC ---
 const spawnObject = (type) => {
     let model;
-    // Normalize the type (handle variations)
     const normalizedType = type.toLowerCase().trim();
     
     if (normalizedType === 'table') {
@@ -78,7 +68,6 @@ const spawnObject = (type) => {
     } else if (normalizedType === 'chair') {
         model = createChair(0.7);
     } else if (normalizedType === 'sofa' || normalizedType === 'couch') {
-        // Create a simple sofa (wider chair-like object)
         model = new THREE.Group();
         const sofaMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
         const sofaGeom = new THREE.BoxGeometry(2, 0.8, 1);
@@ -87,7 +76,6 @@ const spawnObject = (type) => {
         model.add(sofa);
         model.userData.type = 'sofa';
     } else {
-        // Default fallback object
         model = new THREE.Group();
         const mesh = new THREE.Mesh(
             new THREE.BoxGeometry(1, 1, 1), 
@@ -110,7 +98,6 @@ const spawnObject = (type) => {
     return model;
 };
 
-// Icon Selection with Glow Logic
 document.querySelectorAll('.grid-item').forEach(item => {
     item.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -189,60 +176,123 @@ document.getElementById('delete-obj-btn').onclick = () => {
     }
 };
 
-// --- 6. REAL VOICE SYSTEM ---
+// --- 6. VOICE SYSTEM USING YOUR voice.js ---
 const micBtn = document.getElementById('mic-trigger');
 const voicePopup = document.getElementById('voice-popup');
 const cmdDisplay = document.getElementById('command-display');
 
-let recognition = null;
+// Voice parsing functions (copied from your voice.js)
+const ACTIONS = {
+    insert: ["insert", "add", "bring", "include"],
+    delete: ["delete", "remove"],
+    clear: ["clear"]
+};
 
-// Initialize voice recognition
-try {
-    recognition = initVoiceRecognition(
-        // onResult callback
-        (transcript, commands) => {
-            console.log('Transcript:', transcript);
-            console.log('Commands:', commands);
-            
-            cmdDisplay.innerText = `You said: "${transcript}"`;
-            
-            // Process each command
-            let processed = false;
-            commands.forEach(cmd => {
-                if (cmd.action === 'insert' && cmd.object) {
-                    spawnObject(cmd.object);
-                    processed = true;
-                } else if (cmd.action === 'delete') {
-                    if (selectedObject) {
-                        scene.remove(selectedObject);
-                        placedObjects = placedObjects.filter(o => o !== selectedObject);
-                        selectedObject = null;
-                        processed = true;
-                    }
-                } else if (cmd.action === 'clear') {
-                    placedObjects.forEach(obj => scene.remove(obj));
-                    placedObjects = [];
-                    processed = true;
-                }
-            });
-            
-            if (!processed) {
-                cmdDisplay.innerText = `Couldn't understand: "${transcript}"`;
-            }
-            
-            setTimeout(() => voicePopup.classList.add('hidden'), 2000);
-        },
-        // onError callback
-        (error) => {
-            console.error('Voice recognition error:', error);
-            cmdDisplay.innerText = `Error: ${error}`;
-            setTimeout(() => voicePopup.classList.add('hidden'), 2000);
-        }
-    );
-} catch (error) {
-    console.error('Failed to initialize voice recognition:', error);
+const CONNECTORS = ["and", "then", ","];
+const STOP_WORDS = ["a", "an", "the", "my"];
+
+function splitTranscript(transcript) {
+    let lowered = transcript.toLowerCase();
+    CONNECTORS.forEach(connector => {
+        lowered = lowered.replaceAll(` ${connector} `, " | ");
+    });
+    return lowered.split(" | ");
 }
 
+function parseClause(clause) {
+    const words = clause.split(" ");
+    for (let action in ACTIONS) {
+        for (let keyword of ACTIONS[action]) {
+            const index = words.indexOf(keyword);
+            if (index !== -1) {
+                let objectWords = words.slice(index + 1);
+                objectWords = objectWords.filter(
+                    word => !STOP_WORDS.includes(word)
+                );
+                const object = objectWords.join(" ") || null;
+                return { action, object };
+            }
+        }
+    }
+    return null;
+}
+
+// Setup speech recognition
+let recognition = null;
+
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    console.log("Speech recognition is supported in this browser.");
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = false;  // One command at a time
+    recognition.interimResults = false;
+
+    // Handle speech recognition results
+    recognition.onresult = (event) => {
+        const lastResult = event.results[event.results.length - 1];
+        const transcript = lastResult[0].transcript;
+        
+        console.log('You said:', transcript);
+        cmdDisplay.innerText = `You said: "${transcript}"`;
+
+        // Process the transcript using YOUR parsing logic
+        const clauses = splitTranscript(transcript);
+        const results = [];
+
+        clauses.forEach(clause => {
+            const parsed = parseClause(clause);
+            if (parsed) results.push(parsed);
+        });
+
+        console.log('Parsed commands:', results);
+
+        // Execute the commands
+        let processed = false;
+        results.forEach(cmd => {
+            if (cmd.action === 'insert' && cmd.object) {
+                spawnObject(cmd.object);
+                cmdDisplay.innerText = `Placed ${cmd.object.toUpperCase()}`;
+                processed = true;
+            } else if (cmd.action === 'delete') {
+                if (selectedObject) {
+                    scene.remove(selectedObject);
+                    placedObjects = placedObjects.filter(o => o !== selectedObject);
+                    selectedObject = null;
+                    cmdDisplay.innerText = 'Deleted selected object';
+                    processed = true;
+                }
+            } else if (cmd.action === 'clear') {
+                placedObjects.forEach(obj => scene.remove(obj));
+                placedObjects = [];
+                cmdDisplay.innerText = 'Cleared all objects';
+                processed = true;
+            }
+        });
+
+        if (!processed) {
+            cmdDisplay.innerText = `Couldn't understand: "${transcript}"`;
+        }
+
+        setTimeout(() => voicePopup.classList.add('hidden'), 2000);
+    };
+
+    // Handle errors
+    recognition.onerror = (event) => {
+        console.error("Error occurred in recognition:", event.error);
+        cmdDisplay.innerText = `Error: ${event.error}`;
+        setTimeout(() => voicePopup.classList.add('hidden'), 2000);
+    };
+
+    recognition.onend = () => {
+        console.log("Speech recognition service disconnected");
+    };
+} else {
+    console.log("Speech recognition is not supported in this browser.");
+}
+
+// Mic button click handler
 micBtn.onclick = () => {
     if (!recognition) {
         cmdDisplay.innerText = "Voice not supported in this browser";
@@ -250,10 +300,10 @@ micBtn.onclick = () => {
         setTimeout(() => voicePopup.classList.add('hidden'), 2000);
         return;
     }
-    
+
     voicePopup.classList.remove('hidden');
     cmdDisplay.innerText = "Listening...";
-    
+
     try {
         recognition.start();
     } catch (error) {
