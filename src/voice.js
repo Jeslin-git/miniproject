@@ -1,115 +1,113 @@
+// src/voice.js - CLEAN VERSION (No Standalone Code)
+// This module only exports parsing functions for use in main.js
 
-// Voice recognition parsing functions
+/**
+ * Action keywords for voice commands
+ */
 const ACTIONS = {
-  insert: ["insert", "add", "bring", "include", "place"],
-  delete: ["delete", "remove"],
-  clear: ["clear"]
+  insert: ["insert", "add", "bring", "include", "place", "spawn", "create"],
+  delete: ["delete", "remove", "erase"],
+  clear: ["clear", "reset"]
 };
 
+/**
+ * Words that split commands into multiple clauses
+ */
 const CONNECTORS = ["and", "then", ","];
-const STOP_WORDS = ["a", "an", "the", "my"];
+
+/**
+ * Common words to ignore when parsing object names
+ */
+const STOP_WORDS = ["a", "an", "the", "my", "some"];
 
 /**
  * Splits transcript into clauses based on connectors
+ * Example: "add table and place chair" → ["add table", "place chair"]
+ * 
  * @param {string} transcript - The voice recognition transcript
  * @returns {string[]} Array of clause strings
  */
-
-
-function split(transcript) {                        // Splitting transcript(voice result) into clauses(like and,then) based on connectors
+function split(transcript) {
     let lowered = transcript.toLowerCase();
+    
+    // Replace connectors with a separator
     CONNECTORS.forEach(connector => {
-        lowered=lowered.replaceAll(` ${connector} `, " | ");
+        lowered = lowered.replaceAll(` ${connector} `, " | ");
     });
-    return lowered.split(" | ");}
+    
+    return lowered.split(" | ").filter(clause => clause.trim().length > 0);
+}
+
 /**
  * Parses a clause to identify action and object
+ * Example: "add red table" → { action: 'insert', object: 'red table' }
+ * 
  * @param {string} clause - A single clause from the transcript
  * @returns {{action: string, object: string|null}|null} Parsed action and object, or null if not recognized
  */
-    function parseClause(clause) {                // Parsing each clause to identify action and object
-    const words = clause.split(" ");        
-    for (let action in ACTIONS){
+function parseClause(clause) {
+    const words = clause.trim().split(" ");
+    
+    // Look for action keywords
+    for (let action in ACTIONS) {
         for (let keyword of ACTIONS[action]) {
             const index = words.indexOf(keyword);
+            
             if (index !== -1) {
+                // Get words after the action keyword
                 let objectWords = words.slice(index + 1);
-                objectWords = objectWords.filter(
-                word => !STOP_WORDS.includes(word));
+                
+                // Filter out stop words
+                objectWords = objectWords.filter(word => !STOP_WORDS.includes(word));
+                
+                // Join remaining words to form object name
                 const object = objectWords.join(" ") || null;
-                return ({ action, object });
+                
+                return { action, object };
             }
         }
-
     }
+    
     return null;
-    }
-let recognition = null;   
-
-// Speech Recognition setup
-if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    console.log("Speech recognition is supported in this browser.");
-
-    const SpeechRecognition=window.SpeechRecognition || window.webkitSpeechRecognition;
-recognition=new SpeechRecognition();
-recognition.lang="en-US";
-recognition.continuous=true;
-recognition.interimResults=true;
-
-const buttOn=document.getElementById("btn");
-const output = document.getElementById("output");
-const out = document.getElementById("out");
-let isListening = false;
-
-buttOn.addEventListener(        // Add event listener for the button
-    'click',()=>{
-    if (!isListening) {        // Check if listening and start listening
-    recognition.start();
-    output.textContent="Listening...";
-    isListening = true;
-}
-    else{                       // Stop listening
-        recognition.stop();
-        output.textContent="Stopped listening.";
-        isListening = false;
-    }
-});
-// Handle speech recognition results
-recognition.onresult=(event)=>{             
-  const lastResult = event.results[event.results.length - 1];
-  const transcript = lastResult[0].transcript;
-output.textContent='you said "'+transcript+'"'; // Display what user said
-console.log(transcript);
-// Process the transcript
-  const clauses = split(transcript);
-  const results = [];
-
-  clauses.forEach(clause => {  // Parse each clause
-    const parsed = parseClause(clause);
-    if (parsed) results.push(parsed);
-  });
-
-  console.log(results);// Log the results action,object pairs
-
-out.textContent = results   // Display the results action,object pairs
-  .map(r => `Action: ${r.action}, Object: ${r.object ?? "none"}`)
-  .join("\n");
-};
-
-recognition.onerror=(event)=>{  // Handle errors
-    output.textContent="Error occurred in recognition: " + event.error;
-    console.error("Error occurred in recognition: " + event.error);
-};
-recognition.onend = () => { // Handle end of recognition
-    isListening = false;
-    output.textContent="Speech recognition service disconnected";
-    console.log("Speech recognition service disconnected");
-};
-}
-// If speech recognition is not supported
-else {
-    console.log("Speech recognition is not supported in this browser.");
 }
 
+/**
+ * Enhanced parsing with color and size detection (for future NLP)
+ * @param {string} transcript - Full voice command
+ * @returns {Array} Array of parsed commands with enhanced metadata
+ */
+function parseEnhanced(transcript) {
+    const clauses = split(transcript);
+    const results = [];
+    
+    const COLORS = ["red", "blue", "green", "yellow", "orange", "purple", "pink", "black", "white", "brown"];
+    const SIZES = ["big", "large", "small", "tiny", "huge"];
+    
+    clauses.forEach(clause => {
+        const parsed = parseClause(clause);
+        if (parsed) {
+            // Check for colors and sizes in the object name
+            const colors = COLORS.filter(c => clause.includes(c));
+            const sizes = SIZES.filter(s => clause.includes(s));
+            
+            results.push({
+                ...parsed,
+                colors: colors.length > 0 ? colors : null,
+                sizes: sizes.length > 0 ? sizes : null,
+                raw: clause
+            });
+        }
+    });
+    
+    return results;
+}
 
-export { split, parseClause, recognition };
+// Export only the functions, no DOM manipulation
+export { 
+    split, 
+    parseClause, 
+    parseEnhanced,
+    ACTIONS, 
+    CONNECTORS, 
+    STOP_WORDS 
+};
