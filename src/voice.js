@@ -1,5 +1,7 @@
-const ACTIONS = {                                   // Defining possible action and their keywords       
-  insert: ["insert", "add", "bring", "include"],
+
+// Voice recognition parsing functions
+const ACTIONS = {
+  insert: ["insert", "add", "bring", "include", "place"],
   delete: ["delete", "remove"],
   clear: ["clear"]
 };
@@ -7,13 +9,24 @@ const ACTIONS = {                                   // Defining possible action 
 const CONNECTORS = ["and", "then", ","];
 const STOP_WORDS = ["a", "an", "the", "my"];
 
+/**
+ * Splits transcript into clauses based on connectors
+ * @param {string} transcript - The voice recognition transcript
+ * @returns {string[]} Array of clause strings
+ */
+
+
 function split(transcript) {                        // Splitting transcript(voice result) into clauses(like and,then) based on connectors
     let lowered = transcript.toLowerCase();
     CONNECTORS.forEach(connector => {
         lowered=lowered.replaceAll(` ${connector} `, " | ");
     });
     return lowered.split(" | ");}
-
+/**
+ * Parses a clause to identify action and object
+ * @param {string} clause - A single clause from the transcript
+ * @returns {{action: string, object: string|null}|null} Parsed action and object, or null if not recognized
+ */
     function parseClause(clause) {                // Parsing each clause to identify action and object
     const words = clause.split(" ");        
     for (let action in ACTIONS){
@@ -31,13 +44,14 @@ function split(transcript) {                        // Splitting transcript(voic
     }
     return null;
     }
+let recognition = null;   
 
 // Speech Recognition setup
 if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     console.log("Speech recognition is supported in this browser.");
 
     const SpeechRecognition=window.SpeechRecognition || window.webkitSpeechRecognition;
-const recognition=new SpeechRecognition();
+recognition=new SpeechRecognition();
 recognition.lang="en-US";
 recognition.continuous=true;
 recognition.interimResults=true;
@@ -62,8 +76,6 @@ buttOn.addEventListener(        // Add event listener for the button
 });
 // Handle speech recognition results
 recognition.onresult=(event)=>{             
-let action = null;
-let object = null;
   const lastResult = event.results[event.results.length - 1];
   const transcript = lastResult[0].transcript;
 output.textContent='you said "'+transcript+'"'; // Display what user said

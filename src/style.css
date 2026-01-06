@@ -23,6 +23,10 @@ body, html {
     border-bottom: 1px solid #333; z-index: 10;
 }
 
+.window-header .title {
+    font-size: 14px; font-weight: 600; color: #fff;
+}
+
 .ar-badge {
     background: var(--accent-red); color: white; border: none;
     padding: 6px 18px; border-radius: 20px; font-weight: 600; cursor: pointer;
@@ -39,6 +43,68 @@ body, html {
 
 .sidebar { border-right: 1px solid #333; }
 #property-panel { border-left: 1px solid #333; }
+
+.search-box {
+    margin-bottom: 15px;
+}
+
+.search-box input {
+    width: 100%; padding: 10px; background: rgba(255,255,255,0.05);
+    border: 1px solid #333; border-radius: 6px; color: #fff;
+    font-size: 12px;
+}
+
+.search-box input::placeholder {
+    color: #666;
+}
+
+.category-container {
+    margin-bottom: 10px;
+}
+
+.category-header .arrow {
+    transition: transform 0.3s;
+}
+
+.category-header.active .arrow {
+    transform: rotate(180deg);
+}
+
+.sidebar-footer {
+    margin-top: auto; display: flex; gap: 10px; padding-top: 15px;
+    border-top: 1px solid #333;
+}
+
+.icon-btn {
+    background: rgba(255,255,255,0.05); border: 1px solid #333;
+    width: 40px; height: 40px; border-radius: 6px; cursor: pointer;
+    font-size: 18px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s;
+}
+
+.icon-btn:hover {
+    background: rgba(255,255,255,0.1); border-color: var(--accent-cyan);
+}
+
+.icon-wrapper {
+    font-size: 24px; margin-bottom: 5px;
+}
+
+.grid-item span {
+    font-size: 10px; color: #aaa; text-transform: uppercase;
+}
+
+.mic-display {
+    font-size: 32px; margin: 10px 0;
+}
+
+.status-item {
+    display: flex; gap: 5px;
+}
+
+.status-item span {
+    color: var(--accent-cyan);
+}
 
 .viewport { flex: 1; position: relative; z-index: 1; }
 #three-canvas { width: 100% !important; height: 100% !important; display: block; }

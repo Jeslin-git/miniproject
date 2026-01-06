@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { createTable, createChair } from './generators.js';
+import { split, parseClause } from './voice.js';
 
 // --- 1. CORE SETUP ---
 const scene = new THREE.Scene();
@@ -61,8 +62,11 @@ setupDropdown('vehicles-toggle', 'vehicles-grid');
 // --- 4. SPAWNING LOGIC ---
 const spawnObject = (type) => {
     let model;
-    const normalizedType = type.toLowerCase().trim();
-    
+    const normalizedType = type
+        .toLowerCase()
+        .trim()
+        .split(" ")[0];
+
     if (normalizedType === 'table') {
         model = createTable(1.5, 0.8, 0.8);
     } else if (normalizedType === 'chair') {
@@ -75,10 +79,19 @@ const spawnObject = (type) => {
         sofa.position.y = 0.4;
         model.add(sofa);
         model.userData.type = 'sofa';
+    } else if (normalizedType === 'cube') {
+        model = new THREE.Group();
+        const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.MeshStandardMaterial({ color: 0xff4b2b })
+        );
+        mesh.position.y = 0.5;
+        model.add(mesh);
+        model.userData.type = 'cube';
     } else {
         model = new THREE.Group();
         const mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1, 1), 
+            new THREE.BoxGeometry(1, 1, 1),
             new THREE.MeshStandardMaterial({ color: 0xff4b2b })
         );
         mesh.position.y = 0.5;
@@ -89,14 +102,30 @@ const spawnObject = (type) => {
     if (!model.userData.type) {
         model.userData.type = normalizedType || type;
     }
-    
     model.position.set(Math.random() * 4 - 2, 0, Math.random() * 4 - 2);
     scene.add(model);
     placedObjects.push(model);
     updateStatus(`Generated ${model.userData.type}`);
-    
     return model;
 };
+
+function deleteObjectByType(type) {
+    if (!type) return false;
+
+    const normalized = type.toLowerCase().trim().split(" ")[0];
+
+    // Find LAST placed matching object
+    for (let i = placedObjects.length - 1; i >= 0; i--) {
+        if (placedObjects[i].userData.type === normalized) {
+            scene.remove(placedObjects[i]);
+            placedObjects.splice(i, 1);
+            updateStatus(`Deleted ${normalized}`);
+            return true;
+        }
+    }
+
+    return false;
+}
 
 document.querySelectorAll('.grid-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -118,10 +147,10 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 
     if (intersects.length > 0) {
         let root = intersects[0].object;
-        while(root.parent && root.parent !== scene) root = root.parent;
-        
+        while (root.parent && root.parent !== scene) root = root.parent;
+
         selectedObject = root;
-        
+
         deselectAll3D();
         selectedObject.traverse(child => {
             if (child.isMesh) {
@@ -147,27 +176,27 @@ document.getElementById('close-prop-btn').onclick = () => {
     selectedObject = null;
 };
 
-document.getElementById('prop-height').oninput = (e) => { 
-    if(selectedObject) selectedObject.scale.y = e.target.value; 
+document.getElementById('prop-height').oninput = (e) => {
+    if (selectedObject) selectedObject.scale.y = e.target.value;
 };
 
-document.getElementById('prop-width').oninput = (e) => { 
-    if(selectedObject) { 
-        selectedObject.scale.x = e.target.value; 
-        selectedObject.scale.z = e.target.value; 
+document.getElementById('prop-width').oninput = (e) => {
+    if (selectedObject) {
+        selectedObject.scale.x = e.target.value;
+        selectedObject.scale.z = e.target.value;
     }
 };
 
 document.getElementById('prop-color').oninput = (e) => {
-    if(selectedObject) {
-        selectedObject.traverse(c => { 
-            if(c.isMesh) c.material.color.set(e.target.value); 
+    if (selectedObject) {
+        selectedObject.traverse(c => {
+            if (c.isMesh) c.material.color.set(e.target.value);
         });
     }
 };
 
 document.getElementById('delete-obj-btn').onclick = () => {
-    if(selectedObject) {
+    if (selectedObject) {
         scene.remove(selectedObject);
         placedObjects = placedObjects.filter(o => o !== selectedObject);
         selectedObject = null;
@@ -181,42 +210,6 @@ const micBtn = document.getElementById('mic-trigger');
 const voicePopup = document.getElementById('voice-popup');
 const cmdDisplay = document.getElementById('command-display');
 
-// Voice parsing functions (copied from your voice.js)
-const ACTIONS = {
-    insert: ["insert", "add", "bring", "include"],
-    delete: ["delete", "remove"],
-    clear: ["clear"]
-};
-
-const CONNECTORS = ["and", "then", ","];
-const STOP_WORDS = ["a", "an", "the", "my"];
-
-function splitTranscript(transcript) {
-    let lowered = transcript.toLowerCase();
-    CONNECTORS.forEach(connector => {
-        lowered = lowered.replaceAll(` ${connector} `, " | ");
-    });
-    return lowered.split(" | ");
-}
-
-function parseClause(clause) {
-    const words = clause.split(" ");
-    for (let action in ACTIONS) {
-        for (let keyword of ACTIONS[action]) {
-            const index = words.indexOf(keyword);
-            if (index !== -1) {
-                let objectWords = words.slice(index + 1);
-                objectWords = objectWords.filter(
-                    word => !STOP_WORDS.includes(word)
-                );
-                const object = objectWords.join(" ") || null;
-                return { action, object };
-            }
-        }
-    }
-    return null;
-}
-
 // Setup speech recognition
 let recognition = null;
 
@@ -229,16 +222,23 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     recognition.continuous = false;  // One command at a time
     recognition.interimResults = false;
 
+    // Auto-restart if it stops unexpectedly
+    recognition.onend = () => {
+        console.log("Speech recognition ended");
+        setTimeout(() => {
+            voicePopup.classList.add('hidden');
+        }, 800);
+    };    
+
     // Handle speech recognition results
     recognition.onresult = (event) => {
         const lastResult = event.results[event.results.length - 1];
         const transcript = lastResult[0].transcript;
-        
         console.log('You said:', transcript);
         cmdDisplay.innerText = `You said: "${transcript}"`;
 
         // Process the transcript using YOUR parsing logic
-        const clauses = splitTranscript(transcript);
+        const clauses = split(transcript);
         const results = [];
 
         clauses.forEach(clause => {
@@ -251,28 +251,30 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         // Execute the commands
         let processed = false;
         results.forEach(cmd => {
+            // "place" is in the insert array, so it returns action: 'insert'
             if (cmd.action === 'insert' && cmd.object) {
                 spawnObject(cmd.object);
                 cmdDisplay.innerText = `Placed ${cmd.object.toUpperCase()}`;
                 processed = true;
             } else if (cmd.action === 'delete') {
-                if (selectedObject) {
-                    scene.remove(selectedObject);
-                    placedObjects = placedObjects.filter(o => o !== selectedObject);
-                    selectedObject = null;
-                    cmdDisplay.innerText = 'Deleted selected object';
+                const success = deleteObjectByType(cmd.object);
+                if (success) {
+                    cmdDisplay.innerText = `Deleted ${cmd.object}`;
                     processed = true;
+                } else {
+                    cmdDisplay.innerText = `No ${cmd.object} found`;
                 }
             } else if (cmd.action === 'clear') {
                 placedObjects.forEach(obj => scene.remove(obj));
                 placedObjects = [];
+                updateStatus("Scene Cleared");
                 cmdDisplay.innerText = 'Cleared all objects';
                 processed = true;
             }
         });
 
         if (!processed) {
-            cmdDisplay.innerText = `Couldn't understand: "${transcript}"`;
+            cmdDisplay.innerText = "Command not recognized";
         }
 
         setTimeout(() => voicePopup.classList.add('hidden'), 2000);
@@ -281,37 +283,62 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     // Handle errors
     recognition.onerror = (event) => {
         console.error("Error occurred in recognition:", event.error);
-        cmdDisplay.innerText = `Error: ${event.error}`;
-        setTimeout(() => voicePopup.classList.add('hidden'), 2000);
-    };
+        let errorMsg = "Error occurred";
 
-    recognition.onend = () => {
-        console.log("Speech recognition service disconnected");
+        if (event.error === 'not-allowed') {
+            errorMsg = "Microphone permission denied. Please allow microphone access in your browser settings.";
+        } else if (event.error === 'no-speech') {
+            errorMsg = "No speech detected. Please try again.";
+        } else if (event.error === 'audio-capture') {
+            errorMsg = "No microphone found. Please check your microphone connection.";
+        } else {
+            errorMsg = `Error: ${event.error}`;
+        }
+
+        cmdDisplay.innerText = errorMsg;
+        setTimeout(() => voicePopup.classList.add('hidden'), 3000);
     };
 } else {
     console.log("Speech recognition is not supported in this browser.");
 }
 
 // Mic button click handler
-micBtn.onclick = () => {
-    if (!recognition) {
-        cmdDisplay.innerText = "Voice not supported in this browser";
+if (micBtn) {
+    micBtn.onclick = () => {
+        if (!recognition) {
+            cmdDisplay.innerText = "Voice recognition not supported in this browser. Please use Chrome or Edge.";
+            voicePopup.classList.remove('hidden');
+            setTimeout(() => voicePopup.classList.add('hidden'), 3000);
+            return;
+        }
+
         voicePopup.classList.remove('hidden');
-        setTimeout(() => voicePopup.classList.add('hidden'), 2000);
-        return;
-    }
+        cmdDisplay.innerText = "Listening... Click again to stop.";
 
-    voicePopup.classList.remove('hidden');
-    cmdDisplay.innerText = "Listening...";
-
-    try {
-        recognition.start();
-    } catch (error) {
-        console.error('Failed to start recognition:', error);
-        cmdDisplay.innerText = "Failed to start listening";
-        setTimeout(() => voicePopup.classList.add('hidden'), 2000);
-    }
-};
+        try {
+            recognition.start();
+        } catch (error) {
+            console.error('Failed to start recognition:', error);
+            if (error.message && error.message.includes('already started')) {
+                // Recognition is already running, stop it first
+                recognition.stop();
+                setTimeout(() => {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        cmdDisplay.innerText = "Failed to restart. Please refresh the page.";
+                        setTimeout(() => voicePopup.classList.add('hidden'), 3000);
+                    }
+                }, 100);
+            } else {
+                cmdDisplay.innerText = "Failed to start listening. Please check microphone permissions.";
+                setTimeout(() => voicePopup.classList.add('hidden'), 3000);
+            }
+        }
+    };
+} else {
+    console.error('Microphone button not found!');
+}
 
 // --- 7. SAVE SYSTEM ---
 document.getElementById('save-btn').onclick = () => {

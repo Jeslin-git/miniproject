@@ -25,6 +25,7 @@ export function createTable(width, height, depth) {
         tableGroup.add(leg);
     });
 
+    tableGroup.userData.type = 'table';
     return tableGroup;
 }
 
@@ -56,5 +57,7 @@ export function createChair(size = 1) {
         chairGroup.add(leg);
     }
 
+    chairGroup.userData.type = 'chair';
     return chairGroup;
 }
+
