@@ -106,9 +106,6 @@ const spawnObject = (type) => {
     model.position.set(Math.random() * 4 - 2, 0, Math.random() * 4 - 2);
     scene.add(model);
     placedObjects.push(model);
-    document.getElementById('object-count').innerText = placedObjects.length;
-    document.getElementById('system-status').innerText = 'Object Added';
-
     updateStatus(`Generated ${model.userData.type}`);
     return model;
 };
@@ -116,16 +113,14 @@ const spawnObject = (type) => {
 function deleteObjectByType(type) {
     if (!type) return false;
 
-    const normalized = type.toLowerCase().trim();
+    const normalized = type.toLowerCase().trim().split(" ")[0];
 
     // Find LAST placed matching object
     for (let i = placedObjects.length - 1; i >= 0; i--) {
         if (placedObjects[i].userData.type === normalized) {
             scene.remove(placedObjects[i]);
             placedObjects.splice(i, 1);
-
-            document.getElementById('object-count').innerText = placedObjects.length;
-            document.getElementById('system-status').innerText = `Deleted ${normalized}`;
+            updateStatus(`Deleted ${normalized}`);
             return true;
         }
     }
@@ -258,23 +253,23 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         // Execute the commands
         let processed = false;
         results.forEach(cmd => {
+            // "place" is in the insert array, so it returns action: 'insert'
             if (cmd.action === 'insert' && cmd.object) {
                 spawnObject(cmd.object);
                 cmdDisplay.innerText = `Placed ${cmd.object.toUpperCase()}`;
                 processed = true;
             } else if (cmd.action === 'delete') {
                 const success = deleteObjectByType(cmd.object);
-            
                 if (success) {
                     cmdDisplay.innerText = `Deleted ${cmd.object}`;
                     processed = true;
                 } else {
                     cmdDisplay.innerText = `No ${cmd.object} found`;
                 }
-            }
-             else if (cmd.action === 'clear') {
+            } else if (cmd.action === 'clear') {
                 placedObjects.forEach(obj => scene.remove(obj));
                 placedObjects = [];
+                updateStatus("Scene Cleared");
                 cmdDisplay.innerText = 'Cleared all objects';
                 processed = true;
             }
@@ -282,10 +277,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
 
         if (!processed) {
             cmdDisplay.innerText = "Command not recognized";
-            setTimeout(() => {
-                voicePopup.classList.add('hidden');
-            }, 1200);
-        }        
+        }
 
         setTimeout(() => voicePopup.classList.add('hidden'), 2000);
     };

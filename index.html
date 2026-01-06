@@ -1,63 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<<<<<<< Updated upstream
-    <title>Voice AR System</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-        }
-
-        canvas {
-            display: block;
-        }
-    </style>
-=======
     <title>Voice AR 3D Scene</title>
     <link rel="stylesheet" href="/src/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
->>>>>>> Stashed changes
 </head>
-
 <body>
-<<<<<<< Updated upstream
-    <div style="position: absolute; top: 10px; left: 10px; z-index: 100;">
-        <button onclick="window.spawnObject('cube', 0, 0.5, 0, 0xff0000)">Cube</button>
-        <button onclick="window.spawnObject('sphere', 1, 0.5, 0, 0x00ff00)">Sphere</button>
-        <button onclick="window.spawnObject('cylinder', -1, 0.5, 0, 0x0000ff)">Cylinder</button>
-        <button onclick="window.clearScene()">Clear Scene</button>
-        <button onclick="testVoiceIntegration()">Test Voice Command</button>
-    </div>
-
-    <div id="stats" style="position: absolute; top: 10px; right: 10px; color: white; font-family: monospace;">
-        FPS: <span id="fps">0</span>
-    </div>
-
-    <script type="module" src="/main.js"></script>
-    <script>
-        function testVoiceIntegration() {
-            // Simulate what Jeslin's code will send
-            const event = new CustomEvent('VOICE_COMMAND', {
-                detail: {
-                    command: 'PLACE_CUBE',
-                    params: {
-                        x: Math.random() * 4 - 2, // Random between -2 and 2
-                        z: Math.random() * 4 - 2,
-                        color: Math.random() * 0xffffff
-                    }
-                }
-            });
-            window.dispatchEvent(event);
-        }
-    </script>
-</body>
-
-</html>
-=======
     <div id="editor-window">
         <header class="window-header">
             <div class="title">Voice AR 3D Scene</div>
@@ -154,4 +104,3 @@
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
->>>>>>> Stashed changes
