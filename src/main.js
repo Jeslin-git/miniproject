@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { createTable, createChair } from './utils/generators.js';
-import { split, parseClause } from './utils/voice.js';
+import { VoiceManager } from './utils/voiceManager.js';
 
 // --- 1. CORE SETUP ---
 const scene = new THREE.Scene();
@@ -205,136 +205,33 @@ document.getElementById('delete-obj-btn').onclick = () => {
     }
 };
 
-// --- 6. VOICE SYSTEM USING YOUR voice.js ---
-const micBtn = document.getElementById('mic-trigger');
-const voicePopup = document.getElementById('voice-popup');
-const cmdDisplay = document.getElementById('command-display');
-
-// Setup speech recognition
-let recognition = null;
-
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    console.log("Speech recognition is supported in this browser.");
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.continuous = false;  // One command at a time
-    recognition.interimResults = false;
-
-    // Auto-restart if it stops unexpectedly
-    recognition.onend = () => {
-        console.log("Speech recognition ended");
-        setTimeout(() => {
-            voicePopup.classList.add('hidden');
-        }, 800);
-    };    
-
-    // Handle speech recognition results
-    recognition.onresult = (event) => {
-        const lastResult = event.results[event.results.length - 1];
-        const transcript = lastResult[0].transcript;
-        console.log('You said:', transcript);
-        cmdDisplay.innerText = `You said: "${transcript}"`;
-
-        // Process the transcript using YOUR parsing logic
-        const clauses = split(transcript);
-        const results = [];
-
-        clauses.forEach(clause => {
-            const parsed = parseClause(clause);
-            if (parsed) results.push(parsed);
-        });
-
-        console.log('Parsed commands:', results);
-
-        // Execute the commands
-        let processed = false;
-        results.forEach(cmd => {
-            // "place" is in the insert array, so it returns action: 'insert'
-            if (cmd.action === 'insert' && cmd.object) {
-                spawnObject(cmd.object);
-                cmdDisplay.innerText = `Placed ${cmd.object.toUpperCase()}`;
-                processed = true;
-            } else if (cmd.action === 'delete') {
-                const success = deleteObjectByType(cmd.object);
-                if (success) {
-                    cmdDisplay.innerText = `Deleted ${cmd.object}`;
-                    processed = true;
-                } else {
-                    cmdDisplay.innerText = `No ${cmd.object} found`;
-                }
-            } else if (cmd.action === 'clear') {
-                placedObjects.forEach(obj => scene.remove(obj));
-                placedObjects = [];
-                updateStatus("Scene Cleared");
-                cmdDisplay.innerText = 'Cleared all objects';
-                processed = true;
-            }
-        });
-
-        if (!processed) {
-            cmdDisplay.innerText = "Command not recognized";
-        }
-
-        setTimeout(() => voicePopup.classList.add('hidden'), 2000);
-    };
-
-    // Handle errors
-    recognition.onerror = (event) => {
-        console.error("Error occurred in recognition:", event.error);
-        let errorMsg = "Error occurred";
-
-        if (event.error === 'not-allowed') {
-            errorMsg = "Microphone permission denied. Please allow microphone access in your browser settings.";
-        } else if (event.error === 'no-speech') {
-            errorMsg = "No speech detected. Please try again.";
-        } else if (event.error === 'audio-capture') {
-            errorMsg = "No microphone found. Please check your microphone connection.";
-        } else {
-            errorMsg = `Error: ${event.error}`;
-        }
-
-        cmdDisplay.innerText = errorMsg;
-        setTimeout(() => voicePopup.classList.add('hidden'), 3000);
-    };
-} else {
-    console.log("Speech recognition is not supported in this browser.");
-}
+// --- 6. VOICE SYSTEM ---
+const voiceManager = new VoiceManager({
+    spawnObject: spawnObject,
+    deleteObjectByType: deleteObjectByType,
+    clearScene: () => {
+        placedObjects.forEach(obj => scene.remove(obj));
+        placedObjects = [];
+    },
+    updateStatus: updateStatus
+});
 
 // Mic button click handler
+const micBtn = document.getElementById('mic-trigger');
 if (micBtn) {
     micBtn.onclick = () => {
-        if (!recognition) {
-            cmdDisplay.innerText = "Voice recognition not supported in this browser. Please use Chrome or Edge.";
-            voicePopup.classList.remove('hidden');
-            setTimeout(() => voicePopup.classList.add('hidden'), 3000);
+        if (!voiceManager.isSupported()) {
+            const voicePopup = document.getElementById('voice-popup');
+            const cmdDisplay = document.getElementById('command-display');
+            if (voicePopup && cmdDisplay) {
+                cmdDisplay.innerText = "Voice recognition not supported in this browser. Please use Chrome or Edge.";
+                voicePopup.classList.remove('hidden');
+                setTimeout(() => voicePopup.classList.add('hidden'), 3000);
+            }
             return;
         }
 
-        voicePopup.classList.remove('hidden');
-        cmdDisplay.innerText = "Listening... Click again to stop.";
-
-        try {
-            recognition.start();
-        } catch (error) {
-            console.error('Failed to start recognition:', error);
-            if (error.message && error.message.includes('already started')) {
-                // Recognition is already running, stop it first
-                recognition.stop();
-                setTimeout(() => {
-                    try {
-                        recognition.start();
-                    } catch (e) {
-                        cmdDisplay.innerText = "Failed to restart. Please refresh the page.";
-                        setTimeout(() => voicePopup.classList.add('hidden'), 3000);
-                    }
-                }, 100);
-            } else {
-                cmdDisplay.innerText = "Failed to start listening. Please check microphone permissions.";
-                setTimeout(() => voicePopup.classList.add('hidden'), 3000);
-            }
-        }
+        voiceManager.startListening();
     };
 } else {
     console.error('Microphone button not found!');
