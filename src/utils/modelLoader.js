@@ -15,32 +15,32 @@ const MODEL_DEFINITIONS = {
     // Complex Furniture (GLB models)
     sofa: {
         path: '/assets/furniture/sofa.glb',
-        scale: 0.3,
+        scale: 1,
         type: 'sofa'
     },
     bed: {
         path: '/assets/furniture/simple_bed.glb',
-        scale: 0.3,
+        scale: 0.05,
         type: 'bed'
     },
     lamp: {
         path: '/assets/furniture/simple_table_lamp.glb',
-        scale: 0.3,
+        scale: 1,
         type: 'lamp'
     },
     plant: {
         path: '/assets/furniture/plant_pot.glb',
-        scale: 0.3,
+        scale: 1,
         type: 'plant'
     },
     drawer: {
         path: '/assets/furniture/bedside%20drawer.glb',
-        scale: 0.3,
+        scale: 1.2,
         type: 'drawer'
     },
     carpet: {
         path: '/assets/furniture/carpet_carpet.glb',
-        scale: 0.3,
+        scale: 0.02,
         type: 'carpet'
     },
     mattress: {
@@ -52,12 +52,12 @@ const MODEL_DEFINITIONS = {
     // Electronics
     computer: {
         path: '/assets/Electronics/computer.glb',
-        scale: 0.3,
+        scale: 0.0001,
         type: 'computer'
     },
     tv: {
         path: '/assets/Electronics/tv.glb',
-        scale: 0.3,
+        scale: 1,
         type: 'tv'
     }
 };
