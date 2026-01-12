@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { createTable, createChair } from './generators.js';
-import { split, parseClause } from './voice.js';
+import { createTable, createChair } from './utils/generators.js';
+import { split, parseClause } from './utils/voice.js';
 
 // --- 1. CORE SETUP ---
 const scene = new THREE.Scene();
