@@ -82,14 +82,6 @@ const spawnObject = async (type) => {
             model = createTable(1.5, 0.8, 0.8);
         } else if (normalizedType === 'chair') {
             model = createChair(0.7);
-        } else if (normalizedType === 'sofa' || normalizedType === 'couch') {
-            model = new THREE.Group();
-            const sofaMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-            const sofaGeom = new THREE.BoxGeometry(2, 0.8, 1);
-            const sofa = new THREE.Mesh(sofaGeom, sofaMaterial);
-            sofa.position.y = 0.4;
-            model.add(sofa);
-            model.userData.type = 'sofa';
         } else if (normalizedType === 'cube') {
             model = new THREE.Group();
             const mesh = new THREE.Mesh(

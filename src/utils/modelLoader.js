@@ -10,64 +10,54 @@ const loader = new GLTFLoader();
 // Cache for loaded models
 const modelCache = new Map();
 
-// Model definitions with paths and metadata
+// Model definitions with paths and metadata (only for GLB models)
 const MODEL_DEFINITIONS = {
-    // Furniture
-    table: {
-        path: '/assets/furniture/simple_table_lamp.glb', // Using lamp as table for now
-        scale: 0.3, // Reduced from 1
-        type: 'table'
-    },
-    chair: {
-        path: '/assets/furniture/simple_bed.glb', // Using bed as chair for now
-        scale: 0.15, // Reduced from 0.5
-        type: 'chair'
-    },
+    // Complex Furniture (GLB models)
     sofa: {
         path: '/assets/furniture/sofa.glb',
-        scale: 0.3, // Reduced from 1
+        scale: 0.3,
         type: 'sofa'
     },
     bed: {
         path: '/assets/furniture/simple_bed.glb',
-        scale: 0.3, // Reduced from 1
+        scale: 0.3,
         type: 'bed'
     },
     lamp: {
         path: '/assets/furniture/simple_table_lamp.glb',
-        scale: 0.3, // Reduced from 1
+        scale: 0.3,
         type: 'lamp'
     },
     plant: {
         path: '/assets/furniture/plant_pot.glb',
-        scale: 0.3, // Reduced from 1
+        scale: 0.3,
         type: 'plant'
     },
     drawer: {
-        path: '/assets/furniture/bedside%20drawer.glb', // URL encoded space
-        scale: 0.3, // Reduced from 1
+        path: '/assets/furniture/bedside%20drawer.glb',
+        scale: 0.3,
         type: 'drawer'
     },
     carpet: {
         path: '/assets/furniture/carpet_carpet.glb',
-        scale: 0.3, // Reduced from 1
+        scale: 0.3,
         type: 'carpet'
     },
     mattress: {
         path: '/assets/furniture/mattress.glb',
-        scale: 0.3, // Reduced from 1
+        scale: 0.3,
         type: 'mattress'
     },
 
     // Electronics
     computer: {
         path: '/assets/Electronics/computer.glb',
-        scale: 0.3, // Reduced from 1
+        scale: 0.3,
         type: 'computer'
     },
     tv: {
         path: '/assets/Electronics/tv.glb',
-        scale: 0.3, // Reduced from 1
+        scale: 0.3,
         type: 'tv'
     }
 };
