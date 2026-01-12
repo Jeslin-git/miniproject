@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { createTable, createChair } from './utils/generators.js';
 import { VoiceManager } from './utils/voiceManager.js';
+import { loadModel, getAvailableModels, preloadModels } from './utils/modelLoader.js';
 
 // --- 1. CORE SETUP ---
 const scene = new THREE.Scene();
@@ -57,55 +58,73 @@ const setupDropdown = (btnId, gridId) => {
     }
 };
 setupDropdown('furniture-toggle', 'furniture-grid');
+setupDropdown('electronics-toggle', 'electronics-grid');
 setupDropdown('vehicles-toggle', 'vehicles-grid');
 
 // --- 4. SPAWNING LOGIC ---
-const spawnObject = (type) => {
-    let model;
+const spawnObject = async (type) => {
     const normalizedType = type
         .toLowerCase()
         .trim()
         .split(" ")[0];
 
-    if (normalizedType === 'table') {
-        model = createTable(1.5, 0.8, 0.8);
-    } else if (normalizedType === 'chair') {
-        model = createChair(0.7);
-    } else if (normalizedType === 'sofa' || normalizedType === 'couch') {
-        model = new THREE.Group();
-        const sofaMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-        const sofaGeom = new THREE.BoxGeometry(2, 0.8, 1);
-        const sofa = new THREE.Mesh(sofaGeom, sofaMaterial);
-        sofa.position.y = 0.4;
-        model.add(sofa);
-        model.userData.type = 'sofa';
-    } else if (normalizedType === 'cube') {
-        model = new THREE.Group();
-        const mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1, 1),
-            new THREE.MeshStandardMaterial({ color: 0xff4b2b })
-        );
-        mesh.position.y = 0.5;
-        model.add(mesh);
-        model.userData.type = 'cube';
-    } else {
-        model = new THREE.Group();
-        const mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1, 1),
-            new THREE.MeshStandardMaterial({ color: 0xff4b2b })
-        );
-        mesh.position.y = 0.5;
-        model.add(mesh);
-        model.userData.type = normalizedType || 'object';
+    let model;
+
+    try {
+        // Try to load GLB model first
+        model = await loadModel(normalizedType);
+        console.log(`Loaded GLB model: ${normalizedType}`);
+    } catch (error) {
+        console.log(`GLB model not found for ${normalizedType}, using procedural geometry:`, error.message);
+
+        // Fallback to procedural geometry
+        if (normalizedType === 'table') {
+            model = createTable(1.5, 0.8, 0.8);
+        } else if (normalizedType === 'chair') {
+            model = createChair(0.7);
+        } else if (normalizedType === 'sofa' || normalizedType === 'couch') {
+            model = new THREE.Group();
+            const sofaMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+            const sofaGeom = new THREE.BoxGeometry(2, 0.8, 1);
+            const sofa = new THREE.Mesh(sofaGeom, sofaMaterial);
+            sofa.position.y = 0.4;
+            model.add(sofa);
+            model.userData.type = 'sofa';
+        } else if (normalizedType === 'cube') {
+            model = new THREE.Group();
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(1, 1, 1),
+                new THREE.MeshStandardMaterial({ color: 0xff4b2b })
+            );
+            mesh.position.y = 0.5;
+            model.add(mesh);
+            model.userData.type = 'cube';
+        } else {
+            // Generic cube for unknown objects
+            model = new THREE.Group();
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(1, 1, 1),
+                new THREE.MeshStandardMaterial({ color: 0xff4b2b })
+            );
+            mesh.position.y = 0.5;
+            model.add(mesh);
+            model.userData.type = normalizedType || 'object';
+        }
     }
 
+    // Ensure model has proper userData
     if (!model.userData.type) {
         model.userData.type = normalizedType || type;
     }
+
+    // Position randomly
     model.position.set(Math.random() * 4 - 2, 0, Math.random() * 4 - 2);
+
+    // Add to scene
     scene.add(model);
     placedObjects.push(model);
-    updateStatus(`Generated ${model.userData.type}`);
+    updateStatus(`Spawned ${model.userData.type}`);
+
     return model;
 };
 
@@ -128,11 +147,11 @@ function deleteObjectByType(type) {
 }
 
 document.querySelectorAll('.grid-item').forEach(item => {
-    item.addEventListener('click', (e) => {
+    item.addEventListener('click', async (e) => {
         e.stopPropagation();
         document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('selected'));
         item.classList.add('selected');
-        spawnObject(item.dataset.type);
+        await spawnObject(item.dataset.type);
     });
 });
 
@@ -259,6 +278,9 @@ function animate() {
     renderer.render(scene, camera);
 }
 animate();
+
+// Preload common models
+preloadModels(['table', 'chair', 'sofa']);
 
 window.onresize = () => {
     camera.aspect = viewport.clientWidth / viewport.clientHeight;

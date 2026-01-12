@@ -83,10 +83,15 @@ export class VoiceManager {
         console.log('Parsed commands:', results);
 
         // Execute commands directly
+        this.executeCommands(results);
+    }
+
+    async executeCommands(commands) {
         let processed = false;
-        results.forEach(cmd => {
+
+        for (const cmd of commands) {
             if (cmd.action === 'insert' && cmd.object) {
-                this.spawnObject(cmd.object);
+                await this.spawnObject(cmd.object);
                 this.showMessage(`Placed ${cmd.object.toUpperCase()}`);
                 processed = true;
             } else if (cmd.action === 'delete') {
@@ -103,7 +108,7 @@ export class VoiceManager {
                 this.showMessage('Cleared all objects');
                 processed = true;
             }
-        });
+        }
 
         if (!processed) {
             this.showMessage("Command not recognized");
