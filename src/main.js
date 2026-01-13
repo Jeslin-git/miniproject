@@ -3,8 +3,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { createTable, createChair } from './utils/generators.js';
 import { VoiceManager } from './utils/voiceManager.js';
 import { loadModel, getAvailableModels, preloadModels } from './utils/modelLoader.js';
+import { world, CANNON } from './components/physics.js';
 
-// --- 1. CORE SETUP ---
+// --- 1. CORE SETUP (THREE) ---
 const scene = new THREE.Scene();
 const viewport = document.getElementById('viewport-container');
 const canvas = document.getElementById('three-canvas');
@@ -27,8 +28,39 @@ const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(5, 10, 7);
 scene.add(sun);
 
+// This will store all spawned THREE objects
 let placedObjects = [];
 let selectedObject = null;
+
+// --- 1b. PHYSICS HELPERS (CANNON) ---
+/**
+ * Create a Cannon.js box body that roughly matches a Three.js object.
+ * The body will be added to the shared physics world and attached to model.userData.body
+ */
+const addPhysicsBodyForModel = (model) => {
+    // Compute bounding box in world space
+    const bbox = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+
+    // Fallback in case size couldn't be computed (very small / empty model)
+    if (size.x === 0 && size.y === 0 && size.z === 0) {
+        size.set(1, 1, 1);
+    }
+
+    const halfExtents = new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2);
+    const shape = new CANNON.Box(halfExtents);
+
+    const body = new CANNON.Body({
+        mass: 1, // dynamic
+        position: new CANNON.Vec3(model.position.x, model.position.y, model.position.z),
+        shape
+    });
+
+    world.addBody(body);
+    model.userData.body = body;
+    return body;
+};
 
 // --- 2. INTERACTIVITY HELPERS ---
 const updateStatus = (msg) => {
@@ -61,7 +93,7 @@ setupDropdown('furniture-toggle', 'furniture-grid');
 setupDropdown('electronics-toggle', 'electronics-grid');
 setupDropdown('vehicles-toggle', 'vehicles-grid');
 
-// --- 4. SPAWNING LOGIC ---
+// --- 4. SPAWNING LOGIC (Three + Cannon sync) ---
 const spawnObject = async (type) => {
     const normalizedType = type
         .toLowerCase()
@@ -78,12 +110,12 @@ const spawnObject = async (type) => {
         console.log(`GLB model not found for ${normalizedType}, using procedural geometry:`, error.message);
 
         // Fallback to procedural geometry
-        if (normalizedType === 'table') {
-            model = createTable(1.5, 0.8, 0.8);
-        } else if (normalizedType === 'chair') {
-            model = createChair(0.7);
+    if (normalizedType === 'table') {
+        model = createTable(1.5, 0.8, 0.8);
+    } else if (normalizedType === 'chair') {
+        model = createChair(0.7);
         } else if (normalizedType === 'cube') {
-            model = new THREE.Group();
+        model = new THREE.Group();
             const mesh = new THREE.Mesh(
                 new THREE.BoxGeometry(1, 1, 1),
                 new THREE.MeshStandardMaterial({ color: 0xff4b2b })
@@ -91,16 +123,16 @@ const spawnObject = async (type) => {
             mesh.position.y = 0.5;
             model.add(mesh);
             model.userData.type = 'cube';
-        } else {
+    } else {
             // Generic cube for unknown objects
-            model = new THREE.Group();
-            const mesh = new THREE.Mesh(
-                new THREE.BoxGeometry(1, 1, 1),
-                new THREE.MeshStandardMaterial({ color: 0xff4b2b })
-            );
-            mesh.position.y = 0.5;
-            model.add(mesh);
-            model.userData.type = normalizedType || 'object';
+        model = new THREE.Group();
+        const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1), 
+            new THREE.MeshStandardMaterial({ color: 0xff4b2b })
+        );
+        mesh.position.y = 0.5;
+        model.add(mesh);
+        model.userData.type = normalizedType || 'object';
         }
     }
 
@@ -108,15 +140,16 @@ const spawnObject = async (type) => {
     if (!model.userData.type) {
         model.userData.type = normalizedType || type;
     }
+    
+    // Position randomly above the ground so gravity can act
+    model.position.set(Math.random() * 4 - 2, 2 + Math.random() * 2, Math.random() * 4 - 2);
 
-    // Position randomly
-    model.position.set(Math.random() * 4 - 2, 0, Math.random() * 4 - 2);
-
-    // Add to scene
+    // Add to scene & physics
     scene.add(model);
+    addPhysicsBodyForModel(model);
     placedObjects.push(model);
     updateStatus(`Spawned ${model.userData.type}`);
-
+    
     return model;
 };
 
@@ -128,7 +161,11 @@ function deleteObjectByType(type) {
     // Find LAST placed matching object
     for (let i = placedObjects.length - 1; i >= 0; i--) {
         if (placedObjects[i].userData.type === normalized) {
-            scene.remove(placedObjects[i]);
+            const model = placedObjects[i];
+            if (model.userData.body) {
+                world.removeBody(model.userData.body);
+            }
+            scene.remove(model);
             placedObjects.splice(i, 1);
             updateStatus(`Deleted ${normalized}`);
             return true;
@@ -159,9 +196,9 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
     if (intersects.length > 0) {
         let root = intersects[0].object;
         while (root.parent && root.parent !== scene) root = root.parent;
-
+        
         selectedObject = root;
-
+        
         deselectAll3D();
         selectedObject.traverse(child => {
             if (child.isMesh) {
@@ -187,20 +224,20 @@ document.getElementById('close-prop-btn').onclick = () => {
     selectedObject = null;
 };
 
-document.getElementById('prop-height').oninput = (e) => {
+document.getElementById('prop-height').oninput = (e) => { 
     if (selectedObject) selectedObject.scale.y = e.target.value;
 };
 
-document.getElementById('prop-width').oninput = (e) => {
+document.getElementById('prop-width').oninput = (e) => { 
     if (selectedObject) {
-        selectedObject.scale.x = e.target.value;
-        selectedObject.scale.z = e.target.value;
+        selectedObject.scale.x = e.target.value; 
+        selectedObject.scale.z = e.target.value; 
     }
 };
 
 document.getElementById('prop-color').oninput = (e) => {
     if (selectedObject) {
-        selectedObject.traverse(c => {
+        selectedObject.traverse(c => { 
             if (c.isMesh) c.material.color.set(e.target.value);
         });
     }
@@ -208,6 +245,9 @@ document.getElementById('prop-color').oninput = (e) => {
 
 document.getElementById('delete-obj-btn').onclick = () => {
     if (selectedObject) {
+        if (selectedObject.userData.body) {
+            world.removeBody(selectedObject.userData.body);
+        }
         scene.remove(selectedObject);
         placedObjects = placedObjects.filter(o => o !== selectedObject);
         selectedObject = null;
@@ -221,8 +261,14 @@ const voiceManager = new VoiceManager({
     spawnObject: spawnObject,
     deleteObjectByType: deleteObjectByType,
     clearScene: () => {
-        placedObjects.forEach(obj => scene.remove(obj));
+        placedObjects.forEach(obj => {
+            if (obj.userData.body) {
+                world.removeBody(obj.userData.body);
+            }
+            scene.remove(obj);
+        });
         placedObjects = [];
+        updateStatus("Scene Cleared");
     },
     updateStatus: updateStatus
 });
@@ -230,17 +276,17 @@ const voiceManager = new VoiceManager({
 // Mic button click handler
 const micBtn = document.getElementById('mic-trigger');
 if (micBtn) {
-    micBtn.onclick = () => {
+micBtn.onclick = () => {
         if (!voiceManager.isSupported()) {
             const voicePopup = document.getElementById('voice-popup');
             const cmdDisplay = document.getElementById('command-display');
             if (voicePopup && cmdDisplay) {
                 cmdDisplay.innerText = "Voice recognition not supported in this browser. Please use Chrome or Edge.";
-                voicePopup.classList.remove('hidden');
+        voicePopup.classList.remove('hidden');
                 setTimeout(() => voicePopup.classList.add('hidden'), 3000);
             }
-            return;
-        }
+        return;
+    }
 
         voiceManager.startListening();
     };
@@ -263,12 +309,33 @@ document.getElementById('save-btn').onclick = () => {
     updateStatus("Scene Exported");
 };
 
-// --- 8. ANIMATION LOOP ---
-function animate() {
+// --- 8. ANIMATION LOOP (PHYSICS + RENDER) ---
+let lastTime;
+
+function animate(time) {
     requestAnimationFrame(animate);
+
+    // Step physics world
+    if (lastTime !== undefined) {
+        const delta = (time - lastTime) / 1000; // ms → seconds
+        const fixedTimeStep = 1 / 60;
+        world.step(fixedTimeStep, delta, 3);
+
+        // Sync Three.js meshes with Cannon.js bodies
+        placedObjects.forEach(obj => {
+            const body = obj.userData.body;
+            if (body) {
+                obj.position.copy(body.position);
+                obj.quaternion.copy(body.quaternion);
+            }
+        });
+    }
+    lastTime = time;
+
     controls.update();
     renderer.render(scene, camera);
 }
+
 animate();
 
 // Preload common models
