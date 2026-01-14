@@ -16,7 +16,7 @@
         </header>
 
         <div class="main-container">
-            <aside class="sidebar">
+            <aside class="sidebar" style="overflow-y:auto;">
                 <div class="search-box">
                     <input type="text" placeholder="Search Models..." id="main-search">
                 </div>
@@ -34,6 +34,14 @@
                             <div class="grid-item" data-type="chair" style="--i:2">
                                 <div class="icon-wrapper">🪑</div>
                                 <span>Chair</span>
+                            </div>
+                            <div class="grid-item" data-type="armchair" style="--i:2.5">
+                                <div class="icon-wrapper">🛋️</div>
+                                <span>Armchair</span>
+                            </div>
+                            <div class="grid-item" data-type="officechair" style="--i:2.8">
+                                <div class="icon-wrapper">💺</div>
+                                <span>Office Chair</span>
                             </div>
                             <div class="grid-item" data-type="sofa" style="--i:3">
                                 <div class="icon-wrapper">🛋️</div>
@@ -90,9 +98,51 @@
                         VEHICLES <span class="arrow">⌄</span>
                     </button>
                     <div class="dropdown-content" id="vehicles-grid">
-                        <div class="coming-soon-box">
-                            <p>Coming Soon</p>
-                            <span>Week 4 Update</span>
+                        <div class="model-grid">
+                            <div class="grid-item" data-type="car" style="--i:1">
+                                <div class="icon-wrapper">🚗</div>
+                                <span>Car</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="category-container">
+                    <button class="category-header" id="characters-toggle">
+                        CHARACTERS <span class="arrow">⌄</span>
+                    </button>
+                    <div class="dropdown-content" id="characters-grid">
+                        <div class="model-grid">
+                            <div class="grid-item" data-type="human" style="--i:1">
+                                <div class="icon-wrapper">👤</div>
+                                <span>Human</span>
+                            </div>
+                            <div class="grid-item" data-type="dragon" style="--i:2">
+                                <div class="icon-wrapper">🐉</div>
+                                <span>Dragon</span>
+                            </div>
+                            <div class="grid-item" data-type="animal" style="--i:3">
+                                <div class="icon-wrapper">🐶</div>
+                                <span>Animal</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="category-container">
+                    <button class="category-header" id="props-toggle">
+                        PROPS <span class="arrow">⌄</span>
+                    </button>
+                    <div class="dropdown-content" id="props-grid">
+                        <div class="model-grid">
+                            <div class="grid-item" data-type="food" style="--i:1">
+                                <div class="icon-wrapper">🍎</div>
+                                <span>Food</span>
+                            </div>
+                            <div class="grid-item" data-type="tool" style="--i:2">
+                                <div class="icon-wrapper">🔧</div>
+                                <span>Tool</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -117,7 +167,7 @@
                 </div>
             </main>
 
-            <aside id="property-panel" class="hidden">
+            <aside id="property-panel" class="hidden" style="overflow-y:auto;">
                 <div class="panel-header">
                     <span>PROPERTIES</span>
                     <button id="close-prop-btn">×</button>
@@ -134,6 +184,23 @@
                     <label>Color</label>
                     <input type="color" id="prop-color" value="#ffffff">
                 </div>
+                <div class="prop-group hidden" id="lamp-intensity-group">
+                    <label>Lamp Intensity: <span id="intensity-value">1.2</span></label>
+                    <input type="range" id="prop-intensity" min="0" max="5" step="0.1" value="1.2">
+                </div>
+                <div class="prop-group hidden" id="material-group">
+                    <label>Material</label>
+                    <select id="prop-material">
+                        <option value="wood">Wood</option>
+                        <option value="plastic">Plastic</option>
+                        <option value="metal">Metal</option>
+                    </select>
+                </div>
+                <div class="prop-group hidden" id="carpet-image-group">
+                    <label>Carpet Image</label>
+                    <input type="file" id="prop-carpet-image" accept="image/jpeg,image/png,image/webp">
+                    <small>Upload a JPEG/PNG/WEBP to use as the carpet design.</small>
+                </div>
                 <button id="delete-obj-btn">DELETE OBJECT</button>
             </aside>
         </div>
@@ -145,5 +212,18 @@
         </footer>
     </div>
     <script type="module" src="/src/main.js"></script>
+    <script>
+      (function(){
+        const slider = document.getElementById('prop-intensity');
+        const out = document.getElementById('intensity-value');
+        if (slider && out) {
+          const sync = () => { out.textContent = Number(slider.value || 1.2).toFixed(1); };
+          slider.addEventListener('input', sync);
+          slider.addEventListener('change', sync);
+          // initial sync (after main.js potentially sets the value)
+          setTimeout(sync, 0);
+        }
+      })();
+    </script>
 </body>
 </html>

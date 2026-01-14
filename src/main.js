@@ -1,9 +1,10 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { createTable, createChair } from './utils/generators.js';
+import { createTable, createChair, createSofa, createArmchair, createOfficeChair, createBed, createLamp, createPlant, createCar, createFoodItem, createTool, createElectronics, createHuman, createDragon, createAnimal, createCarpet } from './utils/generators.js';
 import { VoiceManager } from './utils/voiceManager.js';
 import { loadModel, getAvailableModels, preloadModels } from './utils/modelLoader.js';
 import { world, CANNON } from './components/physics.js';
+
 
 // --- 1. CORE SETUP (THREE) ---
 const scene = new THREE.Scene();
@@ -92,6 +93,8 @@ const setupDropdown = (btnId, gridId) => {
 setupDropdown('furniture-toggle', 'furniture-grid');
 setupDropdown('electronics-toggle', 'electronics-grid');
 setupDropdown('vehicles-toggle', 'vehicles-grid');
+setupDropdown('characters-toggle', 'characters-grid');
+setupDropdown('props-toggle', 'props-grid');
 
 // --- 4. SPAWNING LOGIC (Three + Cannon sync) ---
 const spawnObject = async (type) => {
@@ -113,7 +116,35 @@ const spawnObject = async (type) => {
     if (normalizedType === 'table') {
         model = createTable(1.5, 0.8, 0.8);
     } else if (normalizedType === 'chair') {
-        model = createChair(0.7);
+        model = createChair(0.7);    } else if (normalizedType === 'sofa') {
+        model = createSofa(2, 1, 1);
+    } else if (normalizedType === 'armchair') {
+        model = createArmchair(1);
+    } else if (normalizedType === 'office' || normalizedType === 'officechair' || normalizedType === 'office-chair') {
+        model = createOfficeChair(1);
+    } else if (normalizedType === 'bed') {
+        model = createBed(2, 0.6, 1.6);
+    } else if (normalizedType === 'lamp') {
+        model = createLamp(1.2);
+    } else if (normalizedType === 'plant' || normalizedType === 'plants') {
+        model = createPlant(1);
+    } else if (normalizedType === 'dog' || normalizedType === 'cat' || normalizedType === 'animal' || normalizedType === 'animals') {
+        model = createAnimal('animal');
+    } else if (normalizedType === 'car' || normalizedType === 'vehicle') {
+        model = createCar(1);
+    } else if (normalizedType === 'food' || normalizedType === 'apple' || normalizedType === 'banana') {
+        model = createFoodItem(normalizedType);
+    } else if (normalizedType === 'tool' || normalizedType === 'tools' || normalizedType === 'wrench') {
+        model = createTool('tool');
+    } else if (normalizedType === 'electronics' || normalizedType === 'computer' || normalizedType === 'tv') {
+        model = createElectronics(normalizedType);
+    } else if (normalizedType === 'carpet') {
+        model = createCarpet(2, 1.5);
+    }
+    else if (normalizedType === 'human' || normalizedType === 'character') {
+        model = createHuman(1);
+    } else if (normalizedType === 'dragon' || normalizedType === 'fantasy') {
+        model = createDragon(1);
         } else if (normalizedType === 'cube') {
         model = new THREE.Group();
             const mesh = new THREE.Mesh(
@@ -135,6 +166,7 @@ const spawnObject = async (type) => {
         model.userData.type = normalizedType || 'object';
         }
     }
+
 
     // Ensure model has proper userData
     if (!model.userData.type) {
@@ -209,12 +241,16 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 
         document.getElementById('property-panel').classList.remove('hidden');
         updateStatus("Editing Object");
+        updateLampUI(); updateMaterialUI(); updateCarpetUI();
+
     } else {
         selectedObject = null;
+        updateLampUI(); updateMaterialUI(); updateCarpetUI();
         deselectAll3D();
         document.getElementById('property-panel').classList.add('hidden');
         document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('selected'));
-        updateStatus("Ready");
+        updateStatus("Ready");    updateLampUI(); updateMaterialUI(); updateCarpetUI();
+        updateLampUI(); updateMaterialUI(); updateCarpetUI();
     }
 });
 
@@ -222,26 +258,183 @@ document.getElementById('close-prop-btn').onclick = () => {
     document.getElementById('property-panel').classList.add('hidden');
     deselectAll3D();
     selectedObject = null;
+    updateLampUI(); updateMaterialUI(); updateCarpetUI();
 };
 
-document.getElementById('prop-height').oninput = (e) => { 
-    if (selectedObject) selectedObject.scale.y = e.target.value;
-};
+document.getElementById('prop-height').oninput = (e) => {
+    if (!selectedObject) return;
+    const t = (selectedObject.userData && selectedObject.userData.type) || '';
+    const raw = parseFloat(e.target.value);
+  
+    // General clamp for height
+    const clamped = Math.max(0.2, Math.min(3.0, isNaN(raw) ? 1 : raw));
+  
+    // Heuristic: treat very thin objects as electronics (even if type is missing)
+    // Compute bounding box aspect ratio
+    const bbox = new THREE.Box3().setFromObject(selectedObject);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    const thinByShape = Number.isFinite(size.x) && Number.isFinite(size.z) && size.z > 0 && (size.z / size.x) < 0.25;
+  
+    const isElectronics =
+      t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop' || thinByShape;
+  
+    const heightFactor = isElectronics ? Math.min(clamped, 1.1) : clamped;
+    selectedObject.scale.y = heightFactor;
+  };
 
-document.getElementById('prop-width').oninput = (e) => { 
-    if (selectedObject) {
-        selectedObject.scale.x = e.target.value; 
-        selectedObject.scale.z = e.target.value; 
+  document.getElementById('prop-width').oninput = (e) => {
+    if (!selectedObject) return;
+    const t = (selectedObject.userData && selectedObject.userData.type) || '';
+    const raw = parseFloat(e.target.value);
+  
+    // General clamp
+    const clamped = Math.max(0.2, Math.min(2.0, isNaN(raw) ? 1 : raw));
+  
+    const bbox = new THREE.Box3().setFromObject(selectedObject);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    const thinByShape = Number.isFinite(size.x) && Number.isFinite(size.z) && size.z > 0 && (size.z / size.x) < 0.25;
+  
+    const isElectronics =
+      t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop' || thinByShape;
+  
+    if (isElectronics) {
+      // Stricter cap and only change width (X). Keep Z to preserve thinness.
+      const widthFactor = Math.min(clamped, 1.3);
+      selectedObject.scale.x = widthFactor;
+      // selectedObject.scale.z remains unchanged to avoid making it thick
+    } else {
+      // Uniform scaling for general objects
+      selectedObject.scale.x = clamped;
+      selectedObject.scale.z = clamped;
     }
-};
+  };
 
+  // Color picker -> apply to all meshes of selected object (supports multi-material)
 document.getElementById('prop-color').oninput = (e) => {
-    if (selectedObject) {
-        selectedObject.traverse(c => { 
-            if (c.isMesh) c.material.color.set(e.target.value);
+    if (!selectedObject) return;
+    const hex = e.target.value;
+    selectedObject.traverse((c) => {
+      if (c.isMesh) {
+        const materials = Array.isArray(c.material) ? c.material : [c.material];
+        materials.forEach(m => {
+          if (m && m.color && typeof m.color.set === 'function') {
+            m.color.set(hex);
+            m.needsUpdate = true;
+          }
         });
+      }
+    });
+  };
+
+
+const intensityGroup = document.getElementById('lamp-intensity-group');
+const intensityInput = document.getElementById('prop-intensity');
+
+function getLampLight(obj) {
+    if (!obj) return null;
+    let found = null;
+    obj.traverse(n => {
+      if (!found && (n.isPointLight || n.isLight)) found = n;
+    });
+    return found;
+  }
+
+  const updateLampUI = () => {
+    if (!intensityGroup || !intensityInput) return;
+  
+    const isLamp = selectedObject && selectedObject.userData && selectedObject.userData.type === 'lamp';
+    const light =
+      (selectedObject && selectedObject.userData && selectedObject.userData.light) ||
+      getLampLight(selectedObject);
+  
+    if (selectedObject && (light || isLamp)) {
+      // cache discovered light if any
+      if (light) {
+        selectedObject.userData = selectedObject.userData || {};
+        selectedObject.userData.light = light;
+        intensityInput.value = Number(light.intensity ?? 1.2).toFixed(1);
+      }
+      intensityGroup.classList.remove('hidden');
+    } else {
+      intensityGroup.classList.add('hidden');
     }
+  };
+
+  if (intensityInput) {
+    intensityInput.oninput = (e) => {
+      if (!selectedObject) return;
+  
+      let light =
+        (selectedObject.userData && selectedObject.userData.light) ||
+        getLampLight(selectedObject);
+  
+      // If the selected object is a lamp but has no light, create one on-demand
+      if (!light && selectedObject.userData?.type === 'lamp') {
+        light = new THREE.PointLight(0xffffff, 1.2, 5);
+        // Try to position near the top of the lamp
+        const bbox = new THREE.Box3().setFromObject(selectedObject);
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        const y = bbox.max.y - size.y * 0.15;
+        light.position.set(0, Number.isFinite(y) ? y : 1, 0);
+        selectedObject.add(light);
+        selectedObject.userData = selectedObject.userData || {};
+        selectedObject.userData.light = light;
+      }
+  
+      if (light) {
+        light.intensity = parseFloat(e.target.value);
+        selectedObject.userData.light = light; // cache
+      }
+    };
+  }
+
+  // --- Carpet UI (image upload) ---
+const carpetGroup = document.getElementById('carpet-image-group');
+const carpetInput = document.getElementById('prop-carpet-image');
+
+const updateCarpetUI = () => {
+  if (!carpetGroup) return;
+  const isCarpet = selectedObject && selectedObject.userData && selectedObject.userData.type === 'carpet';
+  if (isCarpet) {
+    carpetGroup.classList.remove('hidden');
+  } else {
+    carpetGroup.classList.add('hidden');
+  }
 };
+
+if (carpetInput) {
+  carpetInput.onchange = (e) => {
+    if (!selectedObject) return;
+    const isCarpet = selectedObject.userData && selectedObject.userData.type === 'carpet';
+    const file = e.target.files && e.target.files[0];
+    if (!isCarpet || !file) return;
+
+    const url = URL.createObjectURL(file);
+    const loader = new THREE.TextureLoader();
+    loader.load(url, (tex) => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      // Apply texture to all meshes within the carpet group
+      selectedObject.traverse((c) => {
+        if (c.isMesh) {
+          const mats = Array.isArray(c.material) ? c.material : [c.material];
+          mats.forEach((m) => {
+            if (!m) return;
+            m.map = tex;
+            m.color && m.color.set(0xffffff); // avoid tinting the texture
+            m.needsUpdate = true;
+          });
+        }
+      });
+      updateStatus('Carpet image applied');
+    }, undefined, (err) => {
+      console.error('Failed to load carpet image', err);
+      updateStatus('Failed to load carpet image');
+    });
+  };
+}
 
 document.getElementById('delete-obj-btn').onclick = () => {
     if (selectedObject) {
@@ -251,8 +444,10 @@ document.getElementById('delete-obj-btn').onclick = () => {
         scene.remove(selectedObject);
         placedObjects = placedObjects.filter(o => o !== selectedObject);
         selectedObject = null;
+        updateLampUI(); updateMaterialUI(); updateCarpetUI();
         document.getElementById('property-panel').classList.add('hidden');
         updateStatus("Object Deleted");
+        updateLampUI(); updateMaterialUI(); updateCarpetUI();
     }
 };
 
@@ -317,7 +512,7 @@ function animate(time) {
 
     // Step physics world
     if (lastTime !== undefined) {
-        const delta = (time - lastTime) / 1000; // ms → seconds
+        const delta = (time - lastTime) / 1000; // ms â†’ seconds
         const fixedTimeStep = 1 / 60;
         world.step(fixedTimeStep, delta, 3);
 
@@ -346,3 +541,46 @@ window.onresize = () => {
     camera.updateProjectionMatrix();
     renderer.setSize(viewport.clientWidth, viewport.clientHeight);
 };
+
+// --- Material UI ---
+const materialGroup = document.getElementById('material-group');
+const materialSelect = document.getElementById('prop-material');
+const MATERIAL_TYPES = new Set(['table','chair','sofa','armchair','bed','tool','drawer']);
+
+const updateMaterialUI = () => {
+    if (!materialGroup || !materialSelect) return;
+    const t = selectedObject && selectedObject.userData && selectedObject.userData.type;
+    if (t && MATERIAL_TYPES.has(String(t))) {
+        materialGroup.classList.remove('hidden');
+    } else {
+        materialGroup.classList.add('hidden');
+    }
+};
+
+if (materialSelect) {
+    materialSelect.oninput = (e) => {
+        const choice = e.target.value; // wood | plastic | metal
+        const t = selectedObject && selectedObject.userData && selectedObject.userData.type;
+        if (!selectedObject || !t || !MATERIAL_TYPES.has(String(t))) return;
+
+        const presets = {
+            wood:   { color: 0x8d6e63, metalness: 0.05, roughness: 0.7 },
+            plastic:{ color: 0xcfd8dc, metalness: 0.00, roughness: 0.4 },
+            metal:  { color: 0xb0bec5, metalness: 0.90, roughness: 0.2 },
+        };
+        const p = presets[choice] || presets.wood;
+
+        selectedObject.traverse((c) => {
+            if (c.isMesh) {
+                const mats = Array.isArray(c.material) ? c.material : [c.material];
+                mats.forEach((m) => {
+                    if (!m) return;
+                    if (m.color && m.color.setHex) m.color.setHex(p.color);
+                    if ('metalness' in m) m.metalness = p.metalness;
+                    if ('roughness' in m) m.roughness = p.roughness;
+                    m.needsUpdate = true;
+                });
+            }
+        });
+    };
+}
