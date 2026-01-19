@@ -1,14 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Playground</title>
-    <script>
-        // Redirect to dashboard
-        window.location.href = 'index-dashboard.html';
-    </script>
+    <title>3D Workspace - 3D Playground</title>
     <link rel="stylesheet" href="/src/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
@@ -35,12 +30,15 @@
         .preview-toolbar button#preview-cancel { background: #4a5568; }
         .preview-toolbar button#preview-rotate { background: #805ad5; }
         .preview-toolbar .hint { opacity: 0.8; margin-left: 12px; }
-      </style>
+    </style>
 </head>
 <body>
     <div id="editor-window">
         <header class="window-header">
-            <div class="title">Voice AR 3D Scene</div>
+            <div class="title">
+                <button class="back-btn" onclick="window.location.href='index-dashboard.html#/dashboard'">← Back to Dashboard</button>
+                <span id="project-name">Untitled Project</span>
+            </div>
             <div class="header-right">
                 <div class="header-badge-group">
                     <button class="ar-badge">LIVE AR</button>
@@ -190,7 +188,7 @@
                 </div>
 
                 <div class="sidebar-footer">
-                    <button class="icon-btn" id="save-btn" title="Download JSON">💾</button>
+                    <button class="icon-btn" id="save-btn" title="Save Project">💾</button>
                     <button class="icon-btn">⚙️</button>
                     <button class="icon-btn">❓</button>
                 </div>
@@ -267,8 +265,12 @@
           const sync = () => { out.textContent = Number(slider.value || 1.2).toFixed(1); };
           slider.addEventListener('input', sync);
           slider.addEventListener('change', sync);
-          // initial sync (after main.js potentially sets the value)
           setTimeout(sync, 0);
+        }
+        
+        // Load workspace data when page loads
+        if (window.loadWorkspace) {
+          setTimeout(() => window.loadWorkspace(), 100);
         }
       })();
     </script>

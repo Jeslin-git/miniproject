@@ -4,6 +4,7 @@ import { createTable, createChair, createSofa, createArmchair, createOfficeChair
 import { VoiceManager } from './utils/voiceManager.js';
 import { loadModel, getAvailableModels, preloadModels } from './utils/modelLoader.js';
 import { world, CANNON } from './components/physics.js';
+import { split, parseClause } from './utils/voice.js';
 
 
 // --- 1. CORE SETUP (THREE) ---
@@ -139,6 +140,14 @@ const confirmPreview = () => {
     applyGhostMaterial(previewObject, false);
     previewObject.scale.multiplyScalar(1 / PREVIEW_SCALE);
   
+    // Store base dimensions for step-based scaling
+    const bbox = new THREE.Box3().setFromObject(previewObject);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    previewObject.userData.baseHeight = size.y;
+    previewObject.userData.baseWidth = size.x;
+    previewObject.userData.baseDepth = size.z;
+  
     addPhysicsBodyForModel(previewObject);
     placedObjects.push(previewObject);
     selectedObject = previewObject;
@@ -154,6 +163,7 @@ const confirmPreview = () => {
     updateStatus('Object placed');
     document.getElementById('property-panel').classList.remove('hidden');
     updateLampUI(); updateMaterialUI(); updateCarpetUI();
+    hideCompass(); // Hide compass when object is placed
   };
   
   const cancelPreview = () => {
@@ -170,6 +180,7 @@ const confirmPreview = () => {
     }
   
     updateStatus('Preview cancelled');
+    showCompass(); // Show compass when preview is cancelled
   };
 
 const startPreview = async (type) => {
@@ -198,6 +209,7 @@ const startPreview = async (type) => {
     }
   
     updateStatus(`Previewing ${normalizedType}. Click Confirm or press R/Esc.`);
+    hideCompass(); // Hide compass during preview
   };
 
   //raycasting
@@ -244,6 +256,41 @@ const updateStatus = (msg) => {
     document.getElementById('system-status').innerText = msg;
     document.getElementById('object-count').innerText = placedObjects.length;
 };
+
+// --- Compass Management ---
+const compassElement = document.getElementById('holographic-compass');
+const compassToggle = document.getElementById('compass-toggle');
+let compassVisible = false;
+
+const toggleCompass = () => {
+    compassVisible = !compassVisible;
+    if (compassVisible) {
+        compassElement?.classList.remove('hidden');
+        compassToggle?.classList.add('active');
+    } else {
+        compassElement?.classList.add('hidden');
+        compassToggle?.classList.remove('active');
+    }
+};
+
+const hideCompass = () => {
+    if (compassVisible) {
+        compassElement?.classList.add('hidden');
+        compassVisible = false;
+        compassToggle?.classList.remove('active');
+    }
+};
+
+const showCompass = () => {
+    if (compassVisible && !selectedObject) {
+        compassElement?.classList.remove('hidden');
+    }
+};
+
+// Setup compass toggle
+if (compassToggle) {
+    compassToggle.onclick = toggleCompass;
+}
 
 const deselectAll3D = () => {
     placedObjects.forEach(obj => {
@@ -349,6 +396,14 @@ const spawnObject = async (type) => {
     if (!model.userData.type) {
         model.userData.type = normalizedType || type;
     }
+    
+    // Store base dimensions for step-based scaling
+    const bbox = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    model.userData.baseHeight = size.y;
+    model.userData.baseWidth = size.x;
+    model.userData.baseDepth = size.z;
 
     // Position randomly above the ground so gravity can act
     model.position.set(Math.random() * 4 - 2, 2 + Math.random() * 2, Math.random() * 4 - 2);
@@ -394,6 +449,10 @@ document.querySelectorAll('.grid-item').forEach(item => {
 });
 
 // --- 5. SELECTION & PROPERTIES ---
+let clickTimeout = null;
+let lastClickTime = 0;
+const DOUBLE_CLICK_DELAY = 300;
+
 renderer.domElement.addEventListener('pointerdown', (e) => {
     const rect = renderer.domElement.getBoundingClientRect();
     // If preview is active, confirm placement and stop normal selection flow
@@ -408,9 +467,30 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
         let root = intersects[0].object;
         while (root.parent && root.parent !== scene) root = root.parent;
 
-        selectedObject = root;
+        const currentTime = Date.now();
+        const isDoubleClick = (currentTime - lastClickTime) < DOUBLE_CLICK_DELAY && selectedObject === root;
+        lastClickTime = currentTime;
 
-        // --- Start dragging ---
+        if (isDoubleClick) {
+            // Double-click: Open property panel
+            clearTimeout(clickTimeout);
+            selectedObject = root;
+            deselectAll3D();
+            selectedObject.traverse(child => {
+                if (child.isMesh) {
+                    child.material.emissive = new THREE.Color(0x00ffff);
+                    child.material.emissiveIntensity = 0.2;
+                }
+            });
+            document.getElementById('property-panel').classList.remove('hidden');
+            updateStatus("Editing Object");
+            updateLampUI(); updateMaterialUI(); updateCarpetUI();
+            hideCompass();
+            return;
+        }
+
+        // Single-click: Select and enable dragging
+        selectedObject = root;
         isDragging = true;
         disablePhysics(selectedObject);
 
@@ -424,7 +504,6 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
         raycaster.ray.intersectPlane(dragPlane, intersection);
         dragOffset.copy(intersection).sub(selectedObject.position);
 
-
         deselectAll3D();
         selectedObject.traverse(child => {
             if (child.isMesh) {
@@ -433,42 +512,11 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
             }
         });
 
-        renderer.domElement.addEventListener('pointermove', (e) => {
-            if (!previewObject) return;
-            const rect = renderer.domElement.getBoundingClientRect();
-            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-          
-            raycaster.setFromCamera(mouse, camera);
-            if (raycaster.ray.intersectPlane(groundPlane, planeHit)) {
-              let x = planeHit.x;
-              let z = planeHit.z;
-              if (e.shiftKey) {
-                x = Math.round(x / GRID_SIZE) * GRID_SIZE;
-                z = Math.round(z / GRID_SIZE) * GRID_SIZE;
-              }
-              previewObject.position.x = x;
-              previewObject.position.z = z;
-              previewObject.rotation.y = previewRotationY;
-            }
-          });
-
-    window.addEventListener('keydown', (e) => {
-            if (!previewObject) return;
-            if (e.key === 'Escape') {
-              cancelPreview();
-            } else if (e.key.toLowerCase() === 'r') {
-              previewRotationY += Math.PI / 8;
-            }
-          });
-
-          if (btnPreviewConfirm) btnPreviewConfirm.onclick = () => confirmPreview();
-          if (btnPreviewRotate)  btnPreviewRotate.onclick  = () => { if (previewObject) previewRotationY += Math.PI / 8; };
-          if (btnPreviewCancel)  btnPreviewCancel.onclick  = () => cancelPreview();
-
-    document.getElementById('property-panel').classList.remove('hidden');
-        updateStatus("Editing Object");
-        updateLampUI(); updateMaterialUI(); updateCarpetUI();
+        // Clear any pending single-click timeout
+        clearTimeout(clickTimeout);
+        clickTimeout = setTimeout(() => {
+            // Single click timeout - just selection, no property panel
+        }, DOUBLE_CLICK_DELAY);
 
     } else {
         selectedObject = null;
@@ -476,8 +524,8 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
         deselectAll3D();
         document.getElementById('property-panel').classList.add('hidden');
         document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('selected'));
-        updateStatus("Ready"); updateLampUI(); updateMaterialUI(); updateCarpetUI();
-        updateLampUI(); updateMaterialUI(); updateCarpetUI();
+        updateStatus("Ready");
+        showCompass();
     }
 });
 
@@ -541,55 +589,125 @@ document.getElementById('close-prop-btn').onclick = () => {
     deselectAll3D();
     selectedObject = null;
     updateLampUI(); updateMaterialUI(); updateCarpetUI();
+    showCompass(); // Show compass when property panel is closed
 };
+
+// Step-based scaling system
+const SCALE_STEPS = {
+    // Electronics: small steps to prevent distortion
+    electronics: {
+        height: [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1],
+        width: [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3],
+        depth: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05] // Keep thin
+    },
+    // Furniture: medium steps
+    furniture: {
+        height: [0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0],
+        width: [0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0],
+        depth: [0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0]
+    },
+    // Default: general steps
+    default: {
+        height: [0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.8, 2.2, 2.6, 3.0],
+        width: [0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.8, 2.2, 2.6, 3.0],
+        depth: [0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.8, 2.2, 2.6, 3.0]
+    }
+};
+
+function getScaleSteps(type) {
+    const t = (type || '').toLowerCase();
+    if (t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop') {
+        return SCALE_STEPS.electronics;
+    }
+    if (t === 'table' || t === 'chair' || t === 'sofa' || t === 'bed' || t === 'armchair' || t === 'officechair') {
+        return SCALE_STEPS.furniture;
+    }
+    return SCALE_STEPS.default;
+}
+
+function findClosestStep(value, steps) {
+    return steps.reduce((prev, curr) => 
+        Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+    );
+}
+
+function getStepIndex(value, steps) {
+    const closest = findClosestStep(value, steps);
+    return steps.indexOf(closest);
+}
 
 document.getElementById('prop-height').oninput = (e) => {
     if (!selectedObject) return;
     const t = (selectedObject.userData && selectedObject.userData.type) || '';
     const raw = parseFloat(e.target.value);
-
-    // General clamp for height
-    const clamped = Math.max(0.2, Math.min(3.0, isNaN(raw) ? 1 : raw));
-
-    // Heuristic: treat very thin objects as electronics (even if type is missing)
-    // Compute bounding box aspect ratio
-    const bbox = new THREE.Box3().setFromObject(selectedObject);
-    const size = new THREE.Vector3();
-    bbox.getSize(size);
-    const thinByShape = Number.isFinite(size.x) && Number.isFinite(size.z) && size.z > 0 && (size.z / size.x) < 0.25;
-
-    const isElectronics =
-        t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop' || thinByShape;
-
-    const heightFactor = isElectronics ? Math.min(clamped, 1.1) : clamped;
-    selectedObject.scale.y = heightFactor;
+    
+    if (isNaN(raw)) return;
+    
+    const steps = getScaleSteps(t);
+    const currentBbox = new THREE.Box3().setFromObject(selectedObject);
+    const currentSize = new THREE.Vector3();
+    currentBbox.getSize(currentSize);
+    
+    // Get current scale factor
+    const baseHeight = selectedObject.userData.baseHeight || currentSize.y;
+    const currentScale = currentSize.y / baseHeight;
+    
+    // Find step index from slider value (0-1 range mapped to steps)
+    const stepIndex = Math.round(raw * (steps.height.length - 1));
+    const targetScale = steps.height[Math.max(0, Math.min(stepIndex, steps.height.length - 1))];
+    
+    // Apply step-based scaling
+    if (!selectedObject.userData.baseHeight) {
+        selectedObject.userData.baseHeight = currentSize.y;
+        selectedObject.userData.baseWidth = currentSize.x;
+        selectedObject.userData.baseDepth = currentSize.z;
+    }
+    
+    selectedObject.scale.y = targetScale / selectedObject.userData.baseHeight;
+    
+    // For electronics, maintain aspect ratio
+    if (t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop') {
+        const aspectRatio = selectedObject.userData.baseWidth / selectedObject.userData.baseHeight;
+        selectedObject.scale.x = (targetScale * aspectRatio) / selectedObject.userData.baseWidth;
+    }
 };
 
 document.getElementById('prop-width').oninput = (e) => {
     if (!selectedObject) return;
     const t = (selectedObject.userData && selectedObject.userData.type) || '';
     const raw = parseFloat(e.target.value);
-
-    // General clamp
-    const clamped = Math.max(0.2, Math.min(2.0, isNaN(raw) ? 1 : raw));
-
-    const bbox = new THREE.Box3().setFromObject(selectedObject);
-    const size = new THREE.Vector3();
-    bbox.getSize(size);
-    const thinByShape = Number.isFinite(size.x) && Number.isFinite(size.z) && size.z > 0 && (size.z / size.x) < 0.25;
-
-    const isElectronics =
-        t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop' || thinByShape;
-
+    
+    if (isNaN(raw)) return;
+    
+    const steps = getScaleSteps(t);
+    const currentBbox = new THREE.Box3().setFromObject(selectedObject);
+    const currentSize = new THREE.Vector3();
+    currentBbox.getSize(currentSize);
+    
+    // Initialize base dimensions if needed
+    if (!selectedObject.userData.baseHeight) {
+        selectedObject.userData.baseHeight = currentSize.y;
+        selectedObject.userData.baseWidth = currentSize.x;
+        selectedObject.userData.baseDepth = currentSize.z;
+    }
+    
+    // Find step index from slider value
+    const stepIndex = Math.round(raw * (steps.width.length - 1));
+    const targetScale = steps.width[Math.max(0, Math.min(stepIndex, steps.width.length - 1))];
+    
+    const isElectronics = t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop';
+    
     if (isElectronics) {
-        // Stricter cap and only change width (X). Keep Z to preserve thinness.
-        const widthFactor = Math.min(clamped, 1.3);
-        selectedObject.scale.x = widthFactor;
-        // selectedObject.scale.z remains unchanged to avoid making it thick
+        // Electronics: only scale width, keep depth thin
+        selectedObject.scale.x = targetScale / selectedObject.userData.baseWidth;
+        // Depth stays at base (thin)
+        if (steps.depth && steps.depth[0]) {
+            selectedObject.scale.z = steps.depth[0] / selectedObject.userData.baseDepth;
+        }
     } else {
-        // Uniform scaling for general objects
-        selectedObject.scale.x = clamped;
-        selectedObject.scale.z = clamped;
+        // Uniform scaling for other objects
+        selectedObject.scale.x = targetScale / selectedObject.userData.baseWidth;
+        selectedObject.scale.z = targetScale / selectedObject.userData.baseDepth;
     }
 };
 
@@ -730,6 +848,7 @@ document.getElementById('delete-obj-btn').onclick = () => {
         document.getElementById('property-panel').classList.add('hidden');
         updateStatus("Object Deleted");
         updateLampUI(); updateMaterialUI(); updateCarpetUI();
+        showCompass(); // Show compass when object is deleted
     }
 };
 
@@ -771,13 +890,95 @@ if (micBtn) {
     console.error('Microphone button not found!');
 }
 
-// --- 7. SAVE SYSTEM ---
+// --- 7. TEXT COMMAND SYSTEM ---
+const textCommandInput = document.getElementById('text-command-input');
+
+const processTextCommand = async (command) => {
+    if (!command || !command.trim()) return;
+    
+    const clauses = split(command);
+    const results = [];
+    
+    clauses.forEach(clause => {
+        const parsed = parseClause(clause);
+        if (parsed) results.push(parsed);
+    });
+    
+    if (results.length === 0) {
+        updateStatus("Command not recognized");
+        return;
+    }
+    
+    // Execute commands
+    for (const cmd of results) {
+        if (cmd.action === 'insert' && cmd.object) {
+            await spawnObject(cmd.object);
+            updateStatus(`Spawned ${cmd.object}`);
+        } else if (cmd.action === 'delete' && cmd.object) {
+            const success = deleteObjectByType(cmd.object);
+            if (success) {
+                updateStatus(`Deleted ${cmd.object}`);
+            } else {
+                updateStatus(`No ${cmd.object} found`);
+            }
+        } else if (cmd.action === 'clear') {
+            placedObjects.forEach(obj => {
+                if (obj.userData.body) {
+                    world.removeBody(obj.userData.body);
+                }
+                scene.remove(obj);
+            });
+            placedObjects = [];
+            updateStatus("Scene Cleared");
+        }
+    }
+};
+
+if (textCommandInput) {
+    textCommandInput.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            const command = textCommandInput.value.trim();
+            if (command) {
+                await processTextCommand(command);
+                textCommandInput.value = '';
+            }
+        }
+    });
+}
+
+// --- 8. SAVE SYSTEM ---
 document.getElementById('save-btn').onclick = () => {
+    const currentProjectId = localStorage.getItem('currentProject');
     const data = placedObjects.map(obj => ({
         type: obj.userData.type,
-        position: obj.position,
-        scale: obj.scale
+        position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+        scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+        rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+        baseHeight: obj.userData.baseHeight,
+        baseWidth: obj.userData.baseWidth,
+        baseDepth: obj.userData.baseDepth
     }));
+    
+    if (currentProjectId) {
+        // Save to project
+        const projects = JSON.parse(localStorage.getItem('projects') || '[]');
+        const project = projects.find(p => p.id === currentProjectId);
+        if (project) {
+            project.data = { objects: data };
+            project.modified = Date.now();
+            localStorage.setItem('projects', JSON.stringify(projects));
+            updateStatus("Project Saved");
+            
+            // Update project name in header if available
+            const projectNameEl = document.getElementById('project-name');
+            if (projectNameEl) {
+                projectNameEl.textContent = project.name;
+            }
+            return;
+        }
+    }
+    
+    // Fallback: download as JSON
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -786,7 +987,47 @@ document.getElementById('save-btn').onclick = () => {
     updateStatus("Scene Exported");
 };
 
-// --- 8. ANIMATION LOOP (PHYSICS + RENDER) ---
+// Load project data on workspace load
+window.loadWorkspace = () => {
+    const currentProjectId = localStorage.getItem('currentProject');
+    if (currentProjectId) {
+        const projects = JSON.parse(localStorage.getItem('projects') || '[]');
+        const project = projects.find(p => p.id === currentProjectId);
+        if (project) {
+            const projectNameEl = document.getElementById('project-name');
+            if (projectNameEl) {
+                projectNameEl.textContent = project.name;
+            }
+            // Load project data if available
+            if (project.data && project.data.objects) {
+                // Clear existing objects
+                placedObjects.forEach(obj => {
+                    if (obj.userData.body) world.removeBody(obj.userData.body);
+                    scene.remove(obj);
+                });
+                placedObjects = [];
+                
+                // Load objects (async)
+                project.data.objects.forEach(async (objData) => {
+                    const model = await spawnObject(objData.type);
+                    if (model) {
+                        model.position.set(objData.position.x, objData.position.y, objData.position.z);
+                        model.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                        model.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
+                        if (objData.baseHeight) {
+                            model.userData.baseHeight = objData.baseHeight;
+                            model.userData.baseWidth = objData.baseWidth;
+                            model.userData.baseDepth = objData.baseDepth;
+                        }
+                    }
+                });
+                updateStatus("Project Loaded");
+            }
+        }
+    }
+};
+
+// --- 9. ANIMATION LOOP (PHYSICS + RENDER) ---
 let lastTime;
 
 function animate(time) {
