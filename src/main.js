@@ -33,7 +33,174 @@ scene.add(sun);
 let placedObjects = [];
 let selectedObject = null;
 
-//raycasting
+
+
+// --- Preview state ---
+let previewObject = null;
+let previewType = null;
+let previewRotationY = 0;
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y = 0
+const planeHit = new THREE.Vector3();
+const GRID_SIZE = 1.0;                   // snap size
+const PREVIEW_SCALE = 1.6;               // enlarge factor
+const GHOST_TINT = 0x00ffff;             // cyan
+
+const previewOverlay = document.getElementById('preview-overlay');
+const btnPreviewConfirm = document.getElementById('preview-confirm');
+const btnPreviewRotate = document.getElementById('preview-rotate');
+const btnPreviewCancel = document.getElementById('preview-cancel');
+
+// Keep original material props to restore after ghosting
+const matState = new WeakMap(); // Material -> {opacity, transparent, depthWrite, color}
+
+const applyGhostMaterial = (obj, asGhost) => {
+    obj.traverse((c) => {
+      if (!c.isMesh || !c.material) return;
+      const mats = Array.isArray(c.material) ? c.material : [c.material];
+      mats.forEach((m) => {
+        if (!m) return;
+        if (asGhost) {
+          if (!matState.has(m)) {
+            matState.set(m, {
+              opacity: m.opacity,
+              transparent: m.transparent,
+              depthWrite: 'depthWrite' in m ? m.depthWrite : undefined,
+              color: m.color && m.color.isColor ? m.color.getHex() : undefined,
+            });
+          }
+          m.transparent = true;
+          m.opacity = 0.5;
+          if ('depthWrite' in m) m.depthWrite = false;
+          if (m.color && m.color.setHex) m.color.setHex(GHOST_TINT);
+        } else {
+          const s = matState.get(m);
+          if (s) {
+            m.opacity = s.opacity;
+            m.transparent = s.transparent;
+            if (s.depthWrite !== undefined) m.depthWrite = s.depthWrite;
+            if (s.color !== undefined && m.color && m.color.setHex) m.color.setHex(s.color);
+            matState.delete(m);
+          } else {
+            m.opacity = 1.0; m.transparent = false; if ('depthWrite' in m) m.depthWrite = true;
+          }
+        }
+        m.needsUpdate = true;
+      });
+    });
+  };
+
+// Build a model for preview using GLB if available, else procedural fallback
+const createModelForType = async (normalizedType) => {
+  let model;
+  try {
+    model = await loadModel(normalizedType);
+    console.log(`Loaded GLB model (preview): ${normalizedType}`);
+  } catch (error) {
+    console.log(`GLB not found for ${normalizedType} (preview), using procedural:`, error.message);
+    // Reuse your existing fallback mapping:
+    if (normalizedType === 'table') model = createTable(1.5, 0.8, 0.8);
+    else if (normalizedType === 'chair') model = createChair(0.7);
+    else if (normalizedType === 'sofa') model = createSofa(2, 1, 1);
+    else if (normalizedType === 'armchair') model = createArmchair(1);
+    else if (normalizedType === 'office' || normalizedType === 'officechair' || normalizedType === 'office-chair') model = createOfficeChair(1);
+    else if (normalizedType === 'bed') model = createBed(2, 0.6, 1.6);
+    else if (normalizedType === 'lamp') model = createLamp(1.2);
+    else if (normalizedType === 'plant' || normalizedType === 'plants') model = createPlant(1);
+    else if (normalizedType === 'dog' || normalizedType === 'cat' || normalizedType === 'animal' || normalizedType === 'animals') model = createAnimal('animal');
+    else if (normalizedType === 'car' || normalizedType === 'vehicle') model = createCar(1);
+    else if (normalizedType === 'food' || normalizedType === 'apple' || normalizedType === 'banana') model = createFoodItem(normalizedType);
+    else if (normalizedType === 'tool' || normalizedType === 'tools' || normalizedType === 'wrench') model = createTool('tool');
+    else if (normalizedType === 'electronics' || normalizedType === 'computer' || normalizedType === 'tv') model = createElectronics(normalizedType);
+    else if (normalizedType === 'carpet') model = createCarpet(2, 1.5);
+    else if (normalizedType === 'human' || normalizedType === 'character') model = createHuman(1);
+    else if (normalizedType === 'dragon' || normalizedType === 'fantasy') model = createDragon(1);
+    else if (normalizedType === 'cube') {
+      model = new THREE.Group();
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
+      mesh.position.y = 0.5;
+      model.add(mesh);
+      model.userData.type = 'cube';
+    } else {
+      model = new THREE.Group();
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
+      mesh.position.y = 0.5;
+      model.add(mesh);
+      model.userData.type = normalizedType || 'object';
+    }
+  }
+  if (!model.userData.type) model.userData.type = normalizedType;
+  return model;
+};
+
+const confirmPreview = () => {
+    if (!previewObject) return;
+  
+    // restore materials and scale back
+    applyGhostMaterial(previewObject, false);
+    previewObject.scale.multiplyScalar(1 / PREVIEW_SCALE);
+  
+    addPhysicsBodyForModel(previewObject);
+    placedObjects.push(previewObject);
+    selectedObject = previewObject;
+  
+    previewObject = null;
+    previewType = null;
+  
+    if (previewOverlay) {
+      previewOverlay.classList.add('hidden');
+      previewOverlay.setAttribute('aria-hidden', 'true');
+    }
+  
+    updateStatus('Object placed');
+    document.getElementById('property-panel').classList.remove('hidden');
+    updateLampUI(); updateMaterialUI(); updateCarpetUI();
+  };
+  
+  const cancelPreview = () => {
+    if (!previewObject) return;
+    // Try to restore any ghosted mats before remove
+    applyGhostMaterial(previewObject, false);
+    scene.remove(previewObject);
+    previewObject = null;
+    previewType = null;
+  
+    if (previewOverlay) {
+      previewOverlay.classList.add('hidden');
+      previewOverlay.setAttribute('aria-hidden', 'true');
+    }
+  
+    updateStatus('Preview cancelled');
+  };
+
+const startPreview = async (type) => {
+    if (previewObject) cancelPreview();
+    const normalizedType = type.toLowerCase().trim().split(' ')[0];
+    const model = await createModelForType(normalizedType);
+  
+    // Base position and enlarge
+    const bbox = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3(); bbox.getSize(size);
+    model.position.set(0, Math.max(0.01, size.y * 0.5), 0);
+    model.scale.multiplyScalar(PREVIEW_SCALE);
+  
+    previewRotationY = 0;
+    model.rotation.y = previewRotationY;
+  
+    applyGhostMaterial(model, true);
+    scene.add(model);
+  
+    previewObject = model;
+    previewType = normalizedType;
+  
+    if (previewOverlay) {
+      previewOverlay.classList.remove('hidden');
+      previewOverlay.setAttribute('aria-hidden', 'false');
+    }
+  
+    updateStatus(`Previewing ${normalizedType}. Click Confirm or press R/Esc.`);
+  };
+
+  //raycasting
 let isDragging = false;
 let dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 let dragOffset = new THREE.Vector3();
@@ -222,13 +389,15 @@ document.querySelectorAll('.grid-item').forEach(item => {
         e.stopPropagation();
         document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('selected'));
         item.classList.add('selected');
-        await spawnObject(item.dataset.type);
+        await startPreview(item.dataset.type);
     });
 });
 
 // --- 5. SELECTION & PROPERTIES ---
 renderer.domElement.addEventListener('pointerdown', (e) => {
     const rect = renderer.domElement.getBoundingClientRect();
+    // If preview is active, confirm placement and stop normal selection flow
+    if (previewObject) { confirmPreview(); return; }
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
@@ -264,7 +433,40 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
             }
         });
 
-        document.getElementById('property-panel').classList.remove('hidden');
+        renderer.domElement.addEventListener('pointermove', (e) => {
+            if (!previewObject) return;
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          
+            raycaster.setFromCamera(mouse, camera);
+            if (raycaster.ray.intersectPlane(groundPlane, planeHit)) {
+              let x = planeHit.x;
+              let z = planeHit.z;
+              if (e.shiftKey) {
+                x = Math.round(x / GRID_SIZE) * GRID_SIZE;
+                z = Math.round(z / GRID_SIZE) * GRID_SIZE;
+              }
+              previewObject.position.x = x;
+              previewObject.position.z = z;
+              previewObject.rotation.y = previewRotationY;
+            }
+          });
+
+    window.addEventListener('keydown', (e) => {
+            if (!previewObject) return;
+            if (e.key === 'Escape') {
+              cancelPreview();
+            } else if (e.key.toLowerCase() === 'r') {
+              previewRotationY += Math.PI / 8;
+            }
+          });
+
+          if (btnPreviewConfirm) btnPreviewConfirm.onclick = () => confirmPreview();
+          if (btnPreviewRotate)  btnPreviewRotate.onclick  = () => { if (previewObject) previewRotationY += Math.PI / 8; };
+          if (btnPreviewCancel)  btnPreviewCancel.onclick  = () => cancelPreview();
+
+    document.getElementById('property-panel').classList.remove('hidden');
         updateStatus("Editing Object");
         updateLampUI(); updateMaterialUI(); updateCarpetUI();
 
