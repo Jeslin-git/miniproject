@@ -9,6 +9,7 @@ export class VoiceManager {
         this.deleteObjectByType = options.deleteObjectByType || (() => false);
         this.clearScene = options.clearScene || (() => {});
         this.updateStatus = options.updateStatus || (() => {});
+        this.geminiAPI = options.geminiAPI || null;
 
         this.voicePopup = document.getElementById('voice-popup');
         this.cmdDisplay = document.getElementById('command-display');
@@ -34,7 +35,7 @@ export class VoiceManager {
 
         // Auto-restart if it stops unexpectedly
         this.recognition.onend = () => {
-            console.log("Speech recognition ended");
+            console.log(`Speech recognition ended`);
             this.isListening = false;
             this.hidePopup();
         };
@@ -43,14 +44,14 @@ export class VoiceManager {
         this.recognition.onresult = (event) => {
             const lastResult = event.results[event.results.length - 1];
             const transcript = lastResult[0].transcript;
-            console.log('Recognized:', transcript);
+            console.log(`Recognized: ${transcript}`);
 
             this.processTranscript(transcript);
         };
 
         // Handle errors
         this.recognition.onerror = (event) => {
-            console.error("Recognition error:", event.error);
+            console.error(`Recognition error: ${event.error}`);
             let errorMsg = "Error occurred";
 
             switch (event.error) {
@@ -71,7 +72,39 @@ export class VoiceManager {
         };
     }
 
-    processTranscript(transcript) {
+    async processTranscript(transcript) {
+        console.log('Processing transcript:', transcript);
+        
+        // Use Gemini API if available, otherwise fallback to simple parsing
+        if (this.geminiAPI) {
+            try {
+                this.showPopup('Understanding with AI...');
+                const parsed = await this.geminiAPI.parseCommand(transcript);
+                console.log('Gemini understood:', parsed);
+                
+                if (parsed.error) {
+                    this.showMessage(`Error: ${parsed.error}`);
+                    return;
+                }
+                
+                // Use Gemini results if they exist and are valid
+                if (parsed.commands && Array.isArray(parsed.commands) && parsed.commands.length > 0) {
+                    await this.executeCommands(parsed.commands);
+                    return;
+                }
+                
+                // Fallback for single command format
+                if (parsed.action && parsed.object) {
+                    await this.executeCommands([parsed]);
+                    return;
+                }
+            } catch (error) {
+                console.error('Gemini API error:', error);
+                this.showMessage('AI processing failed, using fallback');
+            }
+        }
+        
+        // Only use simple fallback if Gemini is not available
         const clauses = split(transcript);
         const results = [];
 
@@ -80,20 +113,27 @@ export class VoiceManager {
             if (parsed) results.push(parsed);
         });
 
-        console.log('Parsed commands:', results);
-
-        // Execute commands directly
-        this.executeCommands(results);
+        console.log('Parsed commands (fallback only):', results);
+        await this.executeCommands(results);
     }
 
     async executeCommands(commands) {
         let processed = false;
 
         for (const cmd of commands) {
-            if (cmd.action === 'insert' && cmd.object) {
-                await this.spawnObject(cmd.object);
-                this.showMessage(`Placed ${cmd.object.toUpperCase()}`);
-                processed = true;
+            if (cmd.action === 'place' || cmd.action === 'insert') {
+                if (cmd.object) {
+                    // Enhanced spawning with properties
+                    await this.spawnObject(cmd.object, cmd);
+                    
+                    // Apply additional properties if specified
+                    if (cmd.color || cmd.size || cmd.material) {
+                        this.showMessage(`Placed ${cmd.color || ''} ${cmd.size || ''} ${cmd.material || ''} ${cmd.object.toUpperCase()}`);
+                    } else {
+                        this.showMessage(`Placed ${cmd.object.toUpperCase()}`);
+                    }
+                    processed = true;
+                }
             } else if (cmd.action === 'delete') {
                 const success = this.deleteObjectByType(cmd.object);
                 if (success) {

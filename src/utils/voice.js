@@ -28,14 +28,14 @@ const STOP_WORDS = ["a", "an", "the", "my", "some"];
  * @returns {string[]} Array of clause strings
  */
 function split(transcript) {
-    let lowered = transcript.toLowerCase();
+    let clauses = transcript.toLowerCase();
     
     // Replace connectors with a separator
     CONNECTORS.forEach(connector => {
-        lowered = lowered.replaceAll(` ${connector} `, " | ");
+        clauses = clauses.replaceAll(` ${connector} `, " | ");
     });
     
-    return lowered.split(" | ").filter(clause => clause.trim().length > 0);
+    return clauses.split(" | ").filter(clause => clause.trim().length > 0);
 }
 
 /**
@@ -57,13 +57,15 @@ function parseClause(clause) {
                 // Get words after the action keyword
                 let objectWords = words.slice(index + 1);
                 
-                // Filter out stop words
-                objectWords = objectWords.filter(word => !STOP_WORDS.includes(word));
+                // Filter out stop words and clean up
+                objectWords = objectWords.filter(word => 
+                    word.length > 0 && !STOP_WORDS.includes(word.toLowerCase())
+                );
                 
                 // Join remaining words to form object name
-                const object = objectWords.join(" ") || null;
+                const objectName = objectWords.join(" ");
                 
-                return { action, object };
+                return { action, object: objectName };
             }
         }
     }

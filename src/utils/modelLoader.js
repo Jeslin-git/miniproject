@@ -12,6 +12,18 @@ const modelCache = new Map();
 
 // Model definitions with paths and metadata (only for GLB models)
 const MODEL_DEFINITIONS = {
+    // Basic Furniture (procedural fallbacks - no GLB files)
+    table: {
+        path: null, // Use procedural generation
+        scale: 1,
+        type: 'table'
+    },
+    chair: {
+        path: null, // Use procedural generation
+        scale: 1,
+        type: 'chair'
+    },
+    
     // Complex Furniture (GLB models)
     sofa: {
         path: '/assets/furniture/sofa.glb',
@@ -77,6 +89,13 @@ export function loadModel(modelName) {
             return;
         }
 
+        // If path is null, this is a procedural model - reject to trigger fallback
+        if (!definition.path) {
+            console.log(`Model "${modelName}" uses procedural generation - rejecting to trigger fallback`);
+            reject(new Error(`Model "${modelName}" uses procedural generation`));
+            return;
+        }
+
         console.log(`Loading model: ${modelName} from ${definition.path}`);
 
         // Check cache first
@@ -88,7 +107,7 @@ export function loadModel(modelName) {
             return;
         }
 
-        // Load the model
+        // Load model
         loader.load(
             definition.path,
             (gltf) => {
@@ -158,7 +177,7 @@ export function getModelDefinition(modelName) {
  * Preload commonly used models
  * @param {string[]} modelNames - Models to preload
  */
-export function preloadModels(modelNames = ['table', 'chair', 'sofa']) {
+export function preloadModels(modelNames = ['sofa', 'lamp', 'plant']) {
     console.log('Preloading models:', modelNames);
     loadModels(modelNames).then(() => {
         console.log('Models preloaded successfully');

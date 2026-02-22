@@ -1,13 +1,13 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Playground</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
     <script>
-        // Redirect to dashboard
-        window.location.href = 'index-dashboard.html';
+        // Comment out redirect to allow direct access to 3D editor
+        // window.location.href = 'index-dashboard.html';
     </script>
     <link rel="stylesheet" href="/src/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
@@ -207,6 +207,8 @@
                         <div class="mic-display">🎙️</div>
                     </div>
                     <p id="command-display">Listening...</p>
+                    <div id="transcript" style="font-size: 12px; color: #666; margin-top: 8px;"></div>
+                    <div id="voice-status" style="font-size: 12px; color: #666; margin-top: 4px;"></div>
                 </div>
                 
                 <div id="text-command-container" class="text-command-container">
@@ -258,19 +260,6 @@
             <div class="status-item">Mode: <span id="current-mode">Editor</span></div>
         </footer>
     </div>
-    <script type="module" src="/src/main.js"></script>
-    <script>
-      (function(){
-        const slider = document.getElementById('prop-intensity');
-        const out = document.getElementById('intensity-value');
-        if (slider && out) {
-          const sync = () => { out.textContent = Number(slider.value || 1.2).toFixed(1); };
-          slider.addEventListener('input', sync);
-          slider.addEventListener('change', sync);
-          // initial sync (after main.js potentially sets the value)
-          setTimeout(sync, 0);
-        }
-      })();
-    </script>
+      <script type="module" src="src/main.js"></script>
 </body>
 </html>

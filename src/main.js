@@ -1,16 +1,27 @@
 ﻿import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createTable, createChair, createSofa, createArmchair, createOfficeChair, createBed, createLamp, createPlant, createCar, createFoodItem, createTool, createElectronics, createHuman, createDragon, createAnimal, createCarpet } from './utils/generators.js';
-import { VoiceManager } from './utils/voiceManager.js';
-import { loadModel, getAvailableModels, preloadModels } from './utils/modelLoader.js';
 import { world, CANNON } from './components/physics.js';
+import { loadModel, preloadModels } from './utils/modelLoader.js';
 import { split, parseClause } from './utils/voice.js';
+import { VoiceManager } from './utils/voiceManager.js';
+
+// Import Gemini NLP
+import { GeminiNLP } from '../scripts/geminiNLP.js';
 
 
 // --- 1. CORE SETUP (THREE) ---
 const scene = new THREE.Scene();
 const viewport = document.getElementById('viewport-container');
 const canvas = document.getElementById('three-canvas');
+
+console.log('Viewport found:', !!viewport);
+console.log('Canvas found:', !!canvas);
+
+if (!viewport || !canvas) {
+    console.error('Critical elements not found!');
+    console.log('Available elements:', document.querySelectorAll('#viewport-container, #three-canvas'));
+}
 
 const camera = new THREE.PerspectiveCamera(75, viewport.clientWidth / viewport.clientHeight, 0.1, 1000);
 camera.position.set(5, 5, 5);
@@ -19,6 +30,9 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(viewport.clientWidth, viewport.clientHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setClearColor(0x111111);
+
+console.log('Renderer initialized:', renderer);
+console.log('Canvas size:', viewport.clientWidth, 'x', viewport.clientHeight);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 const raycaster = new THREE.Raycaster();
@@ -33,6 +47,7 @@ scene.add(sun);
 // This will store all spawned THREE objects
 let placedObjects = [];
 let selectedObject = null;
+let lastPlacedObject = null;
 
 
 
@@ -151,6 +166,7 @@ const confirmPreview = () => {
     addPhysicsBodyForModel(previewObject);
     placedObjects.push(previewObject);
     selectedObject = previewObject;
+    lastPlacedObject = previewObject;
   
     previewObject = null;
     previewType = null;
@@ -320,56 +336,64 @@ setupDropdown('characters-toggle', 'characters-grid');
 setupDropdown('props-toggle', 'props-grid');
 
 // --- 4. SPAWNING LOGIC (Three + Cannon sync) ---
-const spawnObject = async (type) => {
+const spawnObject = async (type, props = {}) => {
     const normalizedType = type
         .toLowerCase()
-        .trim()
-        .split(" ")[0];
+        .trim();
+    
+    // Improved type normalization to match object names better
+    let finalType = normalizedType;
+    if (normalizedType.includes('chair')) {
+        if (normalizedType.includes('office') || normalizedType.includes('desk')) finalType = 'officechair';
+        else if (normalizedType.includes('beautiful') || normalizedType.includes('arm')) finalType = 'armchair';
+        else finalType = 'chair';
+    } else if (normalizedType.includes('table') || normalizedType.includes('desk')) {
+        finalType = 'table';
+    }
 
     let model;
 
     try {
         // Try to load GLB model first
-        model = await loadModel(normalizedType);
-        console.log(`Loaded GLB model: ${normalizedType}`);
+        model = await loadModel(finalType);
+        console.log(`Loaded GLB model: ${finalType}`);
     } catch (error) {
-        console.log(`GLB model not found for ${normalizedType}, using procedural geometry:`, error.message);
+        console.log(`GLB model not found for ${finalType}, using procedural geometry:`, error.message);
 
         // Fallback to procedural geometry
-        if (normalizedType === 'table') {
+        if (finalType === 'table') {
             model = createTable(1.5, 0.8, 0.8);
-        } else if (normalizedType === 'chair') {
+        } else if (finalType === 'chair') {
             model = createChair(0.7);
-        } else if (normalizedType === 'sofa') {
+        } else if (finalType === 'sofa') {
             model = createSofa(2, 1, 1);
-        } else if (normalizedType === 'armchair') {
+        } else if (finalType === 'armchair') {
             model = createArmchair(1);
-        } else if (normalizedType === 'office' || normalizedType === 'officechair' || normalizedType === 'office-chair') {
+        } else if (finalType === 'officechair') {
             model = createOfficeChair(1);
-        } else if (normalizedType === 'bed') {
+        } else if (finalType === 'bed') {
             model = createBed(2, 0.6, 1.6);
-        } else if (normalizedType === 'lamp') {
+        } else if (finalType === 'lamp') {
             model = createLamp(1.2);
-        } else if (normalizedType === 'plant' || normalizedType === 'plants') {
+        } else if (finalType === 'plant') {
             model = createPlant(1);
-        } else if (normalizedType === 'dog' || normalizedType === 'cat' || normalizedType === 'animal' || normalizedType === 'animals') {
+        } else if (finalType === 'animal') {
             model = createAnimal('animal');
-        } else if (normalizedType === 'car' || normalizedType === 'vehicle') {
+        } else if (finalType === 'car') {
             model = createCar(1);
-        } else if (normalizedType === 'food' || normalizedType === 'apple' || normalizedType === 'banana') {
-            model = createFoodItem(normalizedType);
-        } else if (normalizedType === 'tool' || normalizedType === 'tools' || normalizedType === 'wrench') {
+        } else if (finalType === 'food') {
+            model = createFoodItem(finalType);
+        } else if (finalType === 'tool') {
             model = createTool('tool');
-        } else if (normalizedType === 'electronics' || normalizedType === 'computer' || normalizedType === 'tv') {
-            model = createElectronics(normalizedType);
-        } else if (normalizedType === 'carpet') {
+        } else if (finalType === 'electronics') {
+            model = createElectronics(finalType);
+        } else if (finalType === 'carpet') {
             model = createCarpet(2, 1.5);
-        }
-        else if (normalizedType === 'human' || normalizedType === 'character') {
+        } else if (finalType === 'human') {
             model = createHuman(1);
-        } else if (normalizedType === 'dragon' || normalizedType === 'fantasy') {
+        } else if (finalType === 'dragon') {
             model = createDragon(1);
-        } else if (normalizedType === 'cube') {
+        } else if (finalType === 'cube') {
             model = new THREE.Group();
             const mesh = new THREE.Mesh(
                 new THREE.BoxGeometry(1, 1, 1),
@@ -387,7 +411,52 @@ const spawnObject = async (type) => {
             );
             mesh.position.y = 0.5;
             model.add(mesh);
-            model.userData.type = normalizedType || 'object';
+            model.userData.type = finalType || 'object';
+        }
+    }
+
+    // Apply Gemini properties if provided
+    if (props) {
+        // Apply color
+        if (props.color) {
+            const colorValue = new THREE.Color(props.color);
+            model.traverse(child => {
+                if (child.isMesh && child.material) {
+                    child.material.color.set(colorValue);
+                }
+            });
+        }
+
+        // Apply size
+        if (props.size) {
+            let scale = 1;
+            if (props.size === 'small') scale = 0.5;
+            else if (props.size === 'large') scale = 1.5;
+            model.scale.set(scale, scale, scale);
+        }
+
+        // Apply material (basic mapping for now)
+        if (props.material) {
+            const presets = {
+                wood: { color: 0x8d6e63, metalness: 0.05, roughness: 0.7 },
+                metal: { color: 0xb0bec5, metalness: 0.90, roughness: 0.2 },
+                plastic: { color: 0xcfd8dc, metalness: 0.00, roughness: 0.4 },
+                glass: { color: 0x88ccee, metalness: 0.1, roughness: 0.1, opacity: 0.5, transparent: true },
+            };
+            const preset = presets[props.material.toLowerCase()];
+            if (preset) {
+                model.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        child.material.color.set(preset.color);
+                        if (preset.metalness !== undefined) child.material.metalness = preset.metalness;
+                        if (preset.roughness !== undefined) child.material.roughness = preset.roughness;
+                        if (preset.opacity !== undefined) {
+                            child.material.opacity = preset.opacity;
+                            child.material.transparent = preset.transparent;
+                        }
+                    }
+                });
+            }
         }
     }
 
@@ -439,14 +508,29 @@ function deleteObjectByType(type) {
     return false;
 }
 
-document.querySelectorAll('.grid-item').forEach(item => {
-    item.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('selected'));
-        item.classList.add('selected');
-        await startPreview(item.dataset.type);
+// Setup grid item clicks with DOM ready check
+function setupGridItems() {
+    console.log('Setting up grid items...');
+    const gridItems = document.querySelectorAll('.grid-item');
+    console.log(`Found ${gridItems.length} grid items`);
+    
+    gridItems.forEach(item => {
+        item.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            console.log('Grid item clicked:', item.dataset.type);
+            document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('selected'));
+            item.classList.add('selected');
+            await startPreview(item.dataset.type);
+        });
     });
-});
+}
+
+// Wait for DOM to be ready before setting up grid items
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupGridItems);
+} else {
+    setupGridItems();
+}
 
 // --- 5. SELECTION & PROPERTIES ---
 let clickTimeout = null;
@@ -853,6 +937,10 @@ document.getElementById('delete-obj-btn').onclick = () => {
 };
 
 // --- 6. VOICE SYSTEM ---
+// Initialize Gemini NLP with your API key
+const geminiAPI = new GeminiNLP('AIzaSyCYC-10Hpg7noEFrcWUx7BKNzlQNm-bPuI'); // <- REPLACE THIS WITH YOUR KEY
+window.geminiAPI = geminiAPI;
+
 const voiceManager = new VoiceManager({
     spawnObject: spawnObject,
     deleteObjectByType: deleteObjectByType,
@@ -866,14 +954,18 @@ const voiceManager = new VoiceManager({
         placedObjects = [];
         updateStatus("Scene Cleared");
     },
-    updateStatus: updateStatus
+    updateStatus: updateStatus,
+    geminiAPI: geminiAPI
 });
 
-// Mic button click handler
+// Mic button click handler with debugging
 const micBtn = document.getElementById('mic-trigger');
+console.log('Mic button found:', !!micBtn);
 if (micBtn) {
     micBtn.onclick = () => {
+        console.log('Mic button clicked');
         if (!voiceManager.isSupported()) {
+            console.log('Voice recognition not supported');
             const voicePopup = document.getElementById('voice-popup');
             const cmdDisplay = document.getElementById('command-display');
             if (voicePopup && cmdDisplay) {
@@ -884,6 +976,7 @@ if (micBtn) {
             return;
         }
 
+        console.log('Starting voice recognition...');
         voiceManager.startListening();
     };
 } else {
@@ -892,44 +985,96 @@ if (micBtn) {
 
 // --- 7. TEXT COMMAND SYSTEM ---
 const textCommandInput = document.getElementById('text-command-input');
+console.log('Text command input found:', !!textCommandInput);
 
 const processTextCommand = async (command) => {
+    console.log('Processing text command:', command);
     if (!command || !command.trim()) return;
     
-    const clauses = split(command);
-    const results = [];
-    
-    clauses.forEach(clause => {
-        const parsed = parseClause(clause);
-        if (parsed) results.push(parsed);
-    });
-    
-    if (results.length === 0) {
-        updateStatus("Command not recognized");
-        return;
-    }
-    
-    // Execute commands
-    for (const cmd of results) {
-        if (cmd.action === 'insert' && cmd.object) {
-            await spawnObject(cmd.object);
-            updateStatus(`Spawned ${cmd.object}`);
-        } else if (cmd.action === 'delete' && cmd.object) {
-            const success = deleteObjectByType(cmd.object);
-            if (success) {
-                updateStatus(`Deleted ${cmd.object}`);
-            } else {
-                updateStatus(`No ${cmd.object} found`);
+    // Use Gemini NLP for text commands if available
+    if (window.geminiAPI) {
+        try {
+            const parsed = await window.geminiAPI.parseCommand(command);
+            console.log('Gemini understood:', parsed);
+            
+            if (parsed.error) {
+                updateStatus(`Error: ${parsed.error}`);
+                return;
             }
-        } else if (cmd.action === 'clear') {
-            placedObjects.forEach(obj => {
-                if (obj.userData.body) {
-                    world.removeBody(obj.userData.body);
+            
+            // Execute Gemini commands if they exist and are valid
+            if (parsed.commands && Array.isArray(parsed.commands) && parsed.commands.length > 0) {
+                for (const cmd of parsed.commands) {
+                    if (cmd.action === 'insert' && cmd.object) {
+                        await spawnObject(cmd.object, cmd);
+                        updateStatus(`Spawned ${cmd.object}`);
+                    } else if (cmd.action === 'delete' && cmd.object) {
+                        const success = deleteObjectByType(cmd.object);
+                        if (success) {
+                            updateStatus(`Deleted ${cmd.object}`);
+                        } else {
+                            updateStatus(`No ${cmd.object} found`);
+                        }
+                    } else if (cmd.action === 'clear') {
+                        placedObjects.forEach(obj => {
+                            if (obj.userData.body) {
+                                world.removeBody(obj.userData.body);
+                            }
+                            scene.remove(obj);
+                        });
+                        placedObjects = [];
+                        updateStatus("Scene Cleared");
+                    }
                 }
-                scene.remove(obj);
-            });
-            placedObjects = [];
-            updateStatus("Scene Cleared");
+                return;
+            }
+            
+            // Fallback for single command format
+            if (parsed.action && parsed.object) {
+                await spawnObject(parsed.object, parsed);
+                updateStatus(`Spawned ${parsed.object}`);
+            }
+        } catch (error) {
+            console.error('Gemini API error:', error);
+            updateStatus('AI processing failed, using fallback');
+        }
+    } else {
+        // Fallback to simple parsing if Gemini not available
+        const clauses = split(command);
+        const results = [];
+        
+        clauses.forEach(clause => {
+            const parsed = parseClause(clause);
+            if (parsed) results.push(parsed);
+        });
+        
+        if (results.length === 0) {
+            updateStatus("Command not recognized");
+            return;
+        }
+        
+        // Execute commands
+        for (const cmd of results) {
+            if (cmd.action === 'insert' && cmd.object) {
+                await spawnObject(cmd.object);
+                updateStatus(`Spawned ${cmd.object}`);
+            } else if (cmd.action === 'delete' && cmd.object) {
+                const success = deleteObjectByType(cmd.object);
+                if (success) {
+                    updateStatus(`Deleted ${cmd.object}`);
+                } else {
+                    updateStatus(`No ${cmd.object} found`);
+                }
+            } else if (cmd.action === 'clear') {
+                placedObjects.forEach(obj => {
+                    if (obj.userData.body) {
+                        world.removeBody(obj.userData.body);
+                    }
+                    scene.remove(obj);
+                });
+                placedObjects = [];
+                updateStatus("Scene Cleared");
+            }
         }
     }
 };
@@ -944,6 +1089,8 @@ if (textCommandInput) {
             }
         }
     });
+} else {
+    console.error('Text command input not found!');
 }
 
 // --- 8. SAVE SYSTEM ---
@@ -1035,7 +1182,7 @@ function animate(time) {
 
     // Step physics world
     if (lastTime !== undefined) {
-        const delta = (time - lastTime) / 1000; // ms â†’ seconds
+        const delta = (time - lastTime) / 1000; // ms → seconds
         const fixedTimeStep = 1 / 60;
         world.step(fixedTimeStep, delta, 3);
 
@@ -1054,10 +1201,12 @@ function animate(time) {
     renderer.render(scene, camera);
 }
 
+console.log('Starting animation loop...');
 animate();
 
 // Preload common models
-preloadModels(['table', 'chair', 'sofa']);
+console.log('Preloading models...');
+preloadModels(['sofa', 'lamp', 'plant']);
 
 window.onresize = () => {
     camera.aspect = viewport.clientWidth / viewport.clientHeight;
@@ -1124,3 +1273,25 @@ function enablePhysics(obj) {
     body.type = CANNON.Body.DYNAMIC;
     body.wakeUp();
 }
+
+// Initialize voice system is already done above in section 6
+
+window.placeObject = async ({ type, color, scale, position }) => {
+  await startPreview(type);
+  if (previewObject) {
+    if (color) {
+      previewObject.traverse((obj) => {
+        if (obj.isMesh && obj.material && obj.material.setHex) {
+          obj.material.setHex(color);
+        }
+      });
+    }
+    if (scale) {
+      previewObject.scale.set(scale, scale, scale);
+    }
+    if (position) {
+      previewObject.position.copy(position);
+    }
+    confirmPreview();
+  }
+};
