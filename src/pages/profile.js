@@ -1,8 +1,7 @@
+import { supabase } from '../lib/supabase.js';
+
 // Profile Page Component
 export function renderProfile() {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const projects = JSON.parse(localStorage.getItem('projects') || '[]');
-    
     return `
         <div class="profile-page">
             <div class="profile-header">
@@ -10,16 +9,33 @@ export function renderProfile() {
                 <h1>Profile</h1>
             </div>
             
-            <div class="profile-container">
+            <div class="profile-container" id="profile-content">
+                <div class="loading-state">Loading profile...</div>
+            </div>
+        </div>
+    `;
+}
+
+export function setupProfileHandlers() {
+    const loadProfile = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const user = session.user;
+        const projects = JSON.parse(localStorage.getItem('projects') || '[]');
+
+        const content = document.getElementById('profile-content');
+        if (content) {
+            content.innerHTML = `
                 <div class="profile-section">
                     <div class="profile-avatar">
                         <div class="avatar-circle">
-                            ${user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                            ${user.email ? user.email.charAt(0).toUpperCase() : 'U'}
                         </div>
                     </div>
                     
                     <div class="profile-info">
-                        <h2>${user.name || 'User'}</h2>
+                        <h2>${user.user_metadata?.full_name || 'User'}</h2>
                         <p class="profile-email">${user.email || 'No email'}</p>
                     </div>
                 </div>
@@ -30,7 +46,7 @@ export function renderProfile() {
                         <div class="stat-label">Projects</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">${new Date(user.created || Date.now()).toLocaleDateString()}</div>
+                        <div class="stat-value">${new Date(user.created_at).toLocaleDateString()}</div>
                         <div class="stat-label">Member Since</div>
                     </div>
                 </div>
@@ -40,7 +56,7 @@ export function renderProfile() {
                     <div class="settings-list">
                         <div class="setting-item">
                             <label>Display Name</label>
-                            <input type="text" id="profile-name" value="${user.name || ''}" placeholder="Your name" />
+                            <input type="text" id="profile-name" value="${user.user_metadata?.full_name || ''}" placeholder="Your name" />
                             <button class="btn-secondary btn-small" id="save-name-btn">Save</button>
                         </div>
                         <div class="setting-item">
@@ -63,67 +79,41 @@ export function renderProfile() {
                     <button class="btn-secondary" onclick="window.router.navigate('/dashboard')">Back to Dashboard</button>
                     <button class="btn-primary" id="logout-profile-btn">Sign Out</button>
                 </div>
-            </div>
-        </div>
-    `;
-}
+            `;
 
-export function setupProfileHandlers() {
-    // Save name button
-    const saveNameBtn = document.getElementById('save-name-btn');
-    if (saveNameBtn) {
-        saveNameBtn.addEventListener('click', () => {
-            const nameInput = document.getElementById('profile-name');
-            const newName = nameInput.value.trim();
-            if (newName) {
-                const user = JSON.parse(localStorage.getItem('user') || '{}');
-                user.name = newName;
-                localStorage.setItem('user', JSON.stringify(user));
-                
-                // Update display
-                const nameDisplay = document.querySelector('.profile-info h2');
-                if (nameDisplay) {
-                    nameDisplay.textContent = newName;
+            // Re-attach handlers
+            setupDynamicHandlers();
+        }
+    };
+
+    const setupDynamicHandlers = () => {
+        // Logout button
+        const logoutBtn = document.getElementById('logout-profile-btn');
+        if (logoutBtn) {
+            logoutBtn.onclick = async () => {
+                if (confirm('Are you sure you want to sign out?')) {
+                    await supabase.auth.signOut();
+                    window.location.hash = '#login';
                 }
-                
-                // Update avatar
-                const avatar = document.querySelector('.avatar-circle');
-                if (avatar) {
-                    avatar.textContent = newName.charAt(0).toUpperCase();
+            };
+        }
+
+        // Save name (Supabase update)
+        const saveNameBtn = document.getElementById('save-name-btn');
+        if (saveNameBtn) {
+            saveNameBtn.onclick = async () => {
+                const nameInput = document.getElementById('profile-name');
+                const newName = nameInput.value.trim();
+                if (newName) {
+                    const { error } = await supabase.auth.updateUser({
+                        data: { full_name: newName }
+                    });
+                    if (error) alert(error.message);
+                    else alert('Profile updated!');
                 }
-                
-                alert('Name updated successfully!');
-            }
-        });
-    }
-    
-    // Logout button
-    const logoutBtn = document.getElementById('logout-profile-btn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            if (confirm('Are you sure you want to sign out?')) {
-                localStorage.removeItem('user');
-                localStorage.removeItem('currentProject');
-                window.router.navigate('/login');
-            }
-        });
-    }
-    
-    // Delete account button
-    const deleteAccountBtn = document.getElementById('delete-account-btn');
-    if (deleteAccountBtn) {
-        deleteAccountBtn.addEventListener('click', () => {
-            const confirmText = prompt('Type "DELETE" to confirm account deletion:');
-            if (confirmText === 'DELETE') {
-                // Clear all user data
-                localStorage.removeItem('user');
-                localStorage.removeItem('projects');
-                localStorage.removeItem('currentProject');
-                alert('Account deleted. Redirecting to login...');
-                window.router.navigate('/login');
-            } else {
-                alert('Account deletion cancelled.');
-            }
-        });
-    }
+            };
+        }
+    };
+
+    loadProfile();
 }

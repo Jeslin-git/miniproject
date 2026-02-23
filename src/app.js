@@ -1,20 +1,19 @@
 // Main Application Entry Point
 import { Router } from './router.js';
 import { renderLogin, renderSignup, setupAuthHandlers } from './pages/auth.js';
-import { renderDashboard, setupDashboardHandlers } from './pages/dashboard.js';
+import { renderDashboard, setupDashboardHandlers, refreshDashboard } from './pages/dashboard.js';
 import { renderProfile, setupProfileHandlers } from './pages/profile.js';
+
+import { supabase } from './lib/supabase.js';
+import { renderLanding, setupLandingHandlers } from './pages/landing.js';
 
 const router = new Router();
 window.router = router;
 
 // Route handlers
 router.register('/', () => {
-    const user = localStorage.getItem('user');
-    if (user) {
-        router.navigate('/dashboard');
-    } else {
-        router.navigate('/login');
-    }
+    renderPage(renderLanding());
+    setTimeout(setupLandingHandlers, 0);
 });
 
 router.register('/login', () => {
@@ -27,22 +26,18 @@ router.register('/signup', () => {
     setTimeout(setupAuthHandlers, 0);
 });
 
-router.register('/dashboard', () => {
-    const user = localStorage.getItem('user');
-    if (!user) {
+router.register('/dashboard', async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
         router.navigate('/login');
         return;
     }
-    renderPage(renderDashboard());
-    // Use requestAnimationFrame to ensure DOM is ready
-    requestAnimationFrame(() => {
-        setupDashboardHandlers();
-    });
+    await refreshDashboard();
 });
 
-router.register('/profile', () => {
-    const user = localStorage.getItem('user');
-    if (!user) {
+router.register('/profile', async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
         router.navigate('/login');
         return;
     }
@@ -50,9 +45,9 @@ router.register('/profile', () => {
     setTimeout(setupProfileHandlers, 0);
 });
 
-router.register('/workspace', () => {
-    const user = localStorage.getItem('user');
-    if (!user) {
+router.register('/workspace', async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
         router.navigate('/login');
         return;
     }

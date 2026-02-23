@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,36 +8,63 @@
     <link rel="stylesheet" href="/src/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        #preview-overlay.hidden { display: none; }
+        #preview-overlay.hidden {
+            display: none;
+        }
+
         #preview-overlay {
-          position: fixed; inset: 0; z-index: 9999;
-          background: rgba(0,0,0,0.25);
-          backdrop-filter: blur(6px);
-          display: flex; align-items: flex-end; justify-content: center;
-          pointer-events: auto;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(6px);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            pointer-events: auto;
         }
+
         .preview-toolbar {
-          background: rgba(20,20,20,0.85);
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 10px;
-          margin: 24px; padding: 12px 16px;
-          display: flex; gap: 8px; align-items: center;
-          color: #eaeaea;
+            background: rgba(20, 20, 20, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            margin: 24px;
+            padding: 12px 16px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            color: #eaeaea;
         }
+
         .preview-toolbar button {
-          background: #2b6cb0; color: white; border: 0; border-radius: 8px;
-          padding: 8px 12px; cursor: pointer;
+            background: #2b6cb0;
+            color: white;
+            border: 0;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
         }
-        .preview-toolbar button#preview-cancel { background: #4a5568; }
-        .preview-toolbar button#preview-rotate { background: #805ad5; }
-        .preview-toolbar .hint { opacity: 0.8; margin-left: 12px; }
+
+        .preview-toolbar button#preview-cancel {
+            background: #4a5568;
+        }
+
+        .preview-toolbar button#preview-rotate {
+            background: #805ad5;
+        }
+
+        .preview-toolbar .hint {
+            opacity: 0.8;
+            margin-left: 12px;
+        }
     </style>
 </head>
+
 <body>
     <div id="editor-window">
         <header class="window-header">
             <div class="title">
-                <button class="back-btn" onclick="window.location.href='index-dashboard.html#/dashboard'">← Back to Dashboard</button>
+                <button class="back-btn" onclick="window.location.href='/'">← Back to Dashboard</button>
                 <span id="project-name">Untitled Project</span>
             </div>
             <div class="header-right">
@@ -60,7 +88,7 @@
                 <div class="search-box">
                     <input type="text" placeholder="Search Models..." id="main-search">
                 </div>
-                
+
                 <div class="category-container">
                     <button class="category-header" id="furniture-toggle">
                         FURNITURE <span class="arrow">⌄</span>
@@ -190,7 +218,7 @@
                 <div class="sidebar-footer">
                     <button class="icon-btn" id="save-btn" title="Save Project">💾</button>
                     <button class="icon-btn">⚙️</button>
-                    <button class="icon-btn">❓</button>
+                    <button class="icon-btn" id="help-btn" title="User Manual">❓</button>
                 </div>
             </aside>
 
@@ -198,7 +226,7 @@
                 <canvas id="three-canvas"></canvas>
                 <button id="compass-toggle" class="compass-icon-btn" title="Toggle Compass">🧭</button>
                 <button id="mic-trigger">🎙️</button>
-                
+
                 <div id="voice-popup" class="hidden">
                     <div class="mic-visual">
                         <div class="pulse-ring"></div>
@@ -208,9 +236,10 @@
                     <div id="transcript" style="font-size: 12px; color: #666; margin-top: 8px;"></div>
                     <div id="voice-status" style="font-size: 12px; color: #666; margin-top: 4px;"></div>
                 </div>
-                
+
                 <div id="text-command-container" class="text-command-container">
-                    <input type="text" id="text-command-input" placeholder="Type command (e.g., spawn table, delete chair)" />
+                    <input type="text" id="text-command-input"
+                        placeholder="Type command (e.g., spawn table, delete chair)" />
                 </div>
             </main>
 
@@ -257,24 +286,67 @@
             <div class="status-item">Objects: <span id="object-count">0</span></div>
             <div class="status-item">Mode: <span id="current-mode">Editor</span></div>
         </footer>
+
+        <!-- Help Modal -->
+        <div id="help-modal" class="modal hidden">
+            <div class="modal-content animate-in">
+                <div class="modal-header">
+                    <h2>User Manual</h2>
+                    <button class="close-modal" id="close-help-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <section>
+                        <h3>👋 Getting Started</h3>
+                        <p>Welcome to 3D Playground! Use this editor to design your 3D scenes.</p>
+                    </section>
+                    <section>
+                        <h3>🖱️ Controls</h3>
+                        <ul>
+                            <li><strong>Drag & Drop:</strong> Click and hold an object to move it around.</li>
+                            <li><strong>Rotate:</strong> Use <strong>Q</strong> and <strong>E</strong> keys to rotate
+                                selected objects.</li>
+                            <li><strong>Properties:</strong> Double-click an object to open its property panel (Color,
+                                Scale, etc.).</li>
+                        </ul>
+                    </section>
+                    <section>
+                        <h3>🎙️ Voice Commands</h3>
+                        <p>Click the microphone icon and try saying:</p>
+                        <ul>
+                            <li><em>"Spawn a table"</em></li>
+                            <li><em>"Delete the chair"</em></li>
+                            <li><em>"Clear all objects"</em></li>
+                        </ul>
+                    </section>
+                    <section>
+                        <h3>🧭 Compass</h3>
+                        <p>Toggle the compass to orient yourself in the 3D space.</p>
+                    </section>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-primary" id="help-ok-btn">Got it!</button>
+                </div>
+            </div>
+        </div>
     </div>
     <script type="module" src="/src/main.js"></script>
     <script>
-      (function(){
-        const slider = document.getElementById('prop-intensity');
-        const out = document.getElementById('intensity-value');
-        if (slider && out) {
-          const sync = () => { out.textContent = Number(slider.value || 1.2).toFixed(1); };
-          slider.addEventListener('input', sync);
-          slider.addEventListener('change', sync);
-          setTimeout(sync, 0);
-        }
-        
-        // Load workspace data when page loads
-        if (window.loadWorkspace) {
-          setTimeout(() => window.loadWorkspace(), 100);
-        }
-      })();
+        (function () {
+            const slider = document.getElementById('prop-intensity');
+            const out = document.getElementById('intensity-value');
+            if (slider && out) {
+                const sync = () => { out.textContent = Number(slider.value || 1.2).toFixed(1); };
+                slider.addEventListener('input', sync);
+                slider.addEventListener('change', sync);
+                setTimeout(sync, 0);
+            }
+
+            // Load workspace data when page loads
+            if (window.loadWorkspace) {
+                setTimeout(() => window.loadWorkspace(), 100);
+            }
+        })();
     </script>
 </body>
+
 </html>

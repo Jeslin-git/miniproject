@@ -1,0 +1,47 @@
+[
+  {
+    "id": "1771787037501",
+    "name": "Tester",
+    "email": "test@example.com",
+    "password": "$2a$10$ncshOpIBbE7JnYZl4TraleDmBXt8gDbBx3SCbeeoXUmqnjasMun4C",
+    "isVerified": false,
+    "verificationCode": "258310",
+    "verificationExpires": 1771787637502
+  },
+  {
+    "id": "1771788512081",
+    "name": "Tester",
+    "email": "test2@example.com",
+    "password": "$2a$10$RJam64U933aMkoYqLg2.Cu8lthLw7TN.dhrRP4sALnUM2hHmfcSG2",
+    "isVerified": false,
+    "verificationCode": "980896",
+    "verificationExpires": 1771789112082
+  },
+  {
+    "id": "1771788594298",
+    "name": "Shilpa Nair",
+    "email": "shilpanair1805@gmail.com",
+    "password": "$2a$10$WxZ0FczB390HCCvjUDWuqOgAOwwVdxKOCZ4u4ccAM2JERB9mfCC5G",
+    "isVerified": false,
+    "verificationCode": "419403",
+    "verificationExpires": 1771789194298
+  },
+  {
+    "id": "1771809622957",
+    "name": "Dynamic Test",
+    "email": "dynamic@test.com",
+    "password": "$2a$10$2bPTRf4cX0hdEJZZabWZcuysA0vW1iPhXozM1wdOwsMiJfEPyuley",
+    "isVerified": false,
+    "verificationCode": "416138",
+    "verificationExpires": 1771810222958
+  },
+  {
+    "id": "1771809923824",
+    "name": "Shilpa Nair",
+    "email": "sevenhells707@gmail.com",
+    "password": "$2a$10$yNZv1lcEA94WNsYjb1IOauBh/5A2r.eRq3VIIg8GBIFYP4LpMwycG",
+    "isVerified": false,
+    "verificationCode": "480337",
+    "verificationExpires": 1771810523824
+  }
+]

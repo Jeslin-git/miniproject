@@ -5,9 +5,8 @@ import { world, CANNON } from './components/physics.js';
 import { loadModel, preloadModels } from './utils/modelLoader.js';
 import { split, parseClause } from './utils/voice.js';
 import { VoiceManager } from './utils/voiceManager.js';
-
-// Import Gemini NLP
 import { GeminiNLP } from '../scripts/geminiNLP.js';
+import { supabase } from './lib/supabase.js';
 
 
 // --- 1. CORE SETUP (THREE) ---
@@ -71,90 +70,90 @@ const matState = new WeakMap(); // Material -> {opacity, transparent, depthWrite
 
 const applyGhostMaterial = (obj, asGhost) => {
     obj.traverse((c) => {
-      if (!c.isMesh || !c.material) return;
-      const mats = Array.isArray(c.material) ? c.material : [c.material];
-      mats.forEach((m) => {
-        if (!m) return;
-        if (asGhost) {
-          if (!matState.has(m)) {
-            matState.set(m, {
-              opacity: m.opacity,
-              transparent: m.transparent,
-              depthWrite: 'depthWrite' in m ? m.depthWrite : undefined,
-              color: m.color && m.color.isColor ? m.color.getHex() : undefined,
-            });
-          }
-          m.transparent = true;
-          m.opacity = 0.5;
-          if ('depthWrite' in m) m.depthWrite = false;
-          if (m.color && m.color.setHex) m.color.setHex(GHOST_TINT);
-        } else {
-          const s = matState.get(m);
-          if (s) {
-            m.opacity = s.opacity;
-            m.transparent = s.transparent;
-            if (s.depthWrite !== undefined) m.depthWrite = s.depthWrite;
-            if (s.color !== undefined && m.color && m.color.setHex) m.color.setHex(s.color);
-            matState.delete(m);
-          } else {
-            m.opacity = 1.0; m.transparent = false; if ('depthWrite' in m) m.depthWrite = true;
-          }
-        }
-        m.needsUpdate = true;
-      });
+        if (!c.isMesh || !c.material) return;
+        const mats = Array.isArray(c.material) ? c.material : [c.material];
+        mats.forEach((m) => {
+            if (!m) return;
+            if (asGhost) {
+                if (!matState.has(m)) {
+                    matState.set(m, {
+                        opacity: m.opacity,
+                        transparent: m.transparent,
+                        depthWrite: 'depthWrite' in m ? m.depthWrite : undefined,
+                        color: m.color && m.color.isColor ? m.color.getHex() : undefined,
+                    });
+                }
+                m.transparent = true;
+                m.opacity = 0.5;
+                if ('depthWrite' in m) m.depthWrite = false;
+                if (m.color && m.color.setHex) m.color.setHex(GHOST_TINT);
+            } else {
+                const s = matState.get(m);
+                if (s) {
+                    m.opacity = s.opacity;
+                    m.transparent = s.transparent;
+                    if (s.depthWrite !== undefined) m.depthWrite = s.depthWrite;
+                    if (s.color !== undefined && m.color && m.color.setHex) m.color.setHex(s.color);
+                    matState.delete(m);
+                } else {
+                    m.opacity = 1.0; m.transparent = false; if ('depthWrite' in m) m.depthWrite = true;
+                }
+            }
+            m.needsUpdate = true;
+        });
     });
-  };
+};
 
 // Build a model for preview using GLB if available, else procedural fallback
 const createModelForType = async (normalizedType) => {
-  let model;
-  try {
-    model = await loadModel(normalizedType);
-    console.log(`Loaded GLB model (preview): ${normalizedType}`);
-  } catch (error) {
-    console.log(`GLB not found for ${normalizedType} (preview), using procedural:`, error.message);
-    // Reuse your existing fallback mapping:
-    if (normalizedType === 'table') model = createTable(1.5, 0.8, 0.8);
-    else if (normalizedType === 'chair') model = createChair(0.7);
-    else if (normalizedType === 'sofa') model = createSofa(2, 1, 1);
-    else if (normalizedType === 'armchair') model = createArmchair(1);
-    else if (normalizedType === 'office' || normalizedType === 'officechair' || normalizedType === 'office-chair') model = createOfficeChair(1);
-    else if (normalizedType === 'bed') model = createBed(2, 0.6, 1.6);
-    else if (normalizedType === 'lamp') model = createLamp(1.2);
-    else if (normalizedType === 'plant' || normalizedType === 'plants') model = createPlant(1);
-    else if (normalizedType === 'dog' || normalizedType === 'cat' || normalizedType === 'animal' || normalizedType === 'animals') model = createAnimal('animal');
-    else if (normalizedType === 'car' || normalizedType === 'vehicle') model = createCar(1);
-    else if (normalizedType === 'food' || normalizedType === 'apple' || normalizedType === 'banana') model = createFoodItem(normalizedType);
-    else if (normalizedType === 'tool' || normalizedType === 'tools' || normalizedType === 'wrench') model = createTool('tool');
-    else if (normalizedType === 'electronics' || normalizedType === 'computer' || normalizedType === 'tv') model = createElectronics(normalizedType);
-    else if (normalizedType === 'carpet') model = createCarpet(2, 1.5);
-    else if (normalizedType === 'human' || normalizedType === 'character') model = createHuman(1);
-    else if (normalizedType === 'dragon' || normalizedType === 'fantasy') model = createDragon(1);
-    else if (normalizedType === 'cube') {
-      model = new THREE.Group();
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
-      mesh.position.y = 0.5;
-      model.add(mesh);
-      model.userData.type = 'cube';
-    } else {
-      model = new THREE.Group();
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
-      mesh.position.y = 0.5;
-      model.add(mesh);
-      model.userData.type = normalizedType || 'object';
+    let model;
+    try {
+        model = await loadModel(normalizedType);
+        console.log(`Loaded GLB model (preview): ${normalizedType}`);
+    } catch (error) {
+        console.log(`GLB not found for ${normalizedType} (preview), using procedural:`, error.message);
+        // Reuse your existing fallback mapping:
+        if (normalizedType === 'table') model = createTable(1.5, 0.8, 0.8);
+        else if (normalizedType === 'chair') model = createChair(0.7);
+        else if (normalizedType === 'sofa') model = createSofa(2, 1, 1);
+        else if (normalizedType === 'armchair') model = createArmchair(1);
+        else if (normalizedType === 'office' || normalizedType === 'officechair' || normalizedType === 'office-chair') model = createOfficeChair(1);
+        else if (normalizedType === 'bed') model = createBed(2, 0.6, 1.6);
+        else if (normalizedType === 'lamp') model = createLamp(1.2);
+        else if (normalizedType === 'plant' || normalizedType === 'plants') model = createPlant(1);
+        else if (normalizedType === 'dog' || normalizedType === 'cat' || normalizedType === 'animal' || normalizedType === 'animals') model = createAnimal('animal');
+        else if (normalizedType === 'car' || normalizedType === 'vehicle') model = createCar(1);
+        else if (normalizedType === 'food' || normalizedType === 'apple' || normalizedType === 'banana') model = createFoodItem(normalizedType);
+        else if (normalizedType === 'tool' || normalizedType === 'tools' || normalizedType === 'wrench') model = createTool('tool');
+        else if (normalizedType === 'electronics' || normalizedType === 'computer' || normalizedType === 'tv') model = createElectronics(normalizedType);
+        else if (normalizedType === 'carpet') model = createCarpet(2, 1.5);
+        else if (normalizedType === 'human' || normalizedType === 'character') model = createHuman(1);
+        else if (normalizedType === 'dragon' || normalizedType === 'fantasy') model = createDragon(1);
+        else if (normalizedType === 'cube') {
+            model = new THREE.Group();
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
+            mesh.position.y = 0.5;
+            model.add(mesh);
+            model.userData.type = 'cube';
+        } else {
+            model = new THREE.Group();
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
+            mesh.position.y = 0.5;
+            model.add(mesh);
+            model.userData.type = normalizedType || 'object';
+        }
     }
-  }
-  if (!model.userData.type) model.userData.type = normalizedType;
-  return model;
+    if (!model.userData.type) model.userData.type = normalizedType;
+    return model;
 };
 
 const confirmPreview = () => {
     if (!previewObject) return;
-  
+
     // restore materials and scale back
     applyGhostMaterial(previewObject, false);
     previewObject.scale.multiplyScalar(1 / PREVIEW_SCALE);
-  
+
     // Store base dimensions for step-based scaling
     const bbox = new THREE.Box3().setFromObject(previewObject);
     const size = new THREE.Vector3();
@@ -162,73 +161,72 @@ const confirmPreview = () => {
     previewObject.userData.baseHeight = size.y;
     previewObject.userData.baseWidth = size.x;
     previewObject.userData.baseDepth = size.z;
-  
+
     addPhysicsBodyForModel(previewObject);
     placedObjects.push(previewObject);
     selectedObject = previewObject;
     lastPlacedObject = previewObject;
-  
     previewObject = null;
     previewType = null;
-  
+
     if (previewOverlay) {
-      previewOverlay.classList.add('hidden');
-      previewOverlay.setAttribute('aria-hidden', 'true');
+        previewOverlay.classList.add('hidden');
+        previewOverlay.setAttribute('aria-hidden', 'true');
     }
-  
+
     updateStatus('Object placed');
     document.getElementById('property-panel').classList.remove('hidden');
     updateLampUI(); updateMaterialUI(); updateCarpetUI();
     hideCompass(); // Hide compass when object is placed
-  };
-  
-  const cancelPreview = () => {
+};
+
+const cancelPreview = () => {
     if (!previewObject) return;
     // Try to restore any ghosted mats before remove
     applyGhostMaterial(previewObject, false);
     scene.remove(previewObject);
     previewObject = null;
     previewType = null;
-  
+
     if (previewOverlay) {
-      previewOverlay.classList.add('hidden');
-      previewOverlay.setAttribute('aria-hidden', 'true');
+        previewOverlay.classList.add('hidden');
+        previewOverlay.setAttribute('aria-hidden', 'true');
     }
-  
+
     updateStatus('Preview cancelled');
     showCompass(); // Show compass when preview is cancelled
-  };
+};
 
 const startPreview = async (type) => {
     if (previewObject) cancelPreview();
     const normalizedType = type.toLowerCase().trim().split(' ')[0];
     const model = await createModelForType(normalizedType);
-  
+
     // Base position and enlarge
     const bbox = new THREE.Box3().setFromObject(model);
     const size = new THREE.Vector3(); bbox.getSize(size);
     model.position.set(0, Math.max(0.01, size.y * 0.5), 0);
     model.scale.multiplyScalar(PREVIEW_SCALE);
-  
+
     previewRotationY = 0;
     model.rotation.y = previewRotationY;
-  
+
     applyGhostMaterial(model, true);
     scene.add(model);
-  
+
     previewObject = model;
     previewType = normalizedType;
-  
+
     if (previewOverlay) {
-      previewOverlay.classList.remove('hidden');
-      previewOverlay.setAttribute('aria-hidden', 'false');
+        previewOverlay.classList.remove('hidden');
+        previewOverlay.setAttribute('aria-hidden', 'false');
     }
-  
+
     updateStatus(`Previewing ${normalizedType}. Click Confirm or press R/Esc.`);
     hideCompass(); // Hide compass during preview
-  };
+};
 
-  //raycasting
+//raycasting
 let isDragging = false;
 let dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 let dragOffset = new THREE.Vector3();
@@ -340,7 +338,7 @@ const spawnObject = async (type, props = {}) => {
     const normalizedType = type
         .toLowerCase()
         .trim();
-    
+
     // Improved type normalization to match object names better
     let finalType = normalizedType;
     if (normalizedType.includes('chair')) {
@@ -465,7 +463,7 @@ const spawnObject = async (type, props = {}) => {
     if (!model.userData.type) {
         model.userData.type = normalizedType || type;
     }
-    
+
     // Store base dimensions for step-based scaling
     const bbox = new THREE.Box3().setFromObject(model);
     const size = new THREE.Vector3();
@@ -513,7 +511,7 @@ function setupGridItems() {
     console.log('Setting up grid items...');
     const gridItems = document.querySelectorAll('.grid-item');
     console.log(`Found ${gridItems.length} grid items`);
-    
+
     gridItems.forEach(item => {
         item.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -710,7 +708,7 @@ function getScaleSteps(type) {
 }
 
 function findClosestStep(value, steps) {
-    return steps.reduce((prev, curr) => 
+    return steps.reduce((prev, curr) =>
         Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
     );
 }
@@ -724,31 +722,31 @@ document.getElementById('prop-height').oninput = (e) => {
     if (!selectedObject) return;
     const t = (selectedObject.userData && selectedObject.userData.type) || '';
     const raw = parseFloat(e.target.value);
-    
+
     if (isNaN(raw)) return;
-    
+
     const steps = getScaleSteps(t);
     const currentBbox = new THREE.Box3().setFromObject(selectedObject);
     const currentSize = new THREE.Vector3();
     currentBbox.getSize(currentSize);
-    
+
     // Get current scale factor
     const baseHeight = selectedObject.userData.baseHeight || currentSize.y;
     const currentScale = currentSize.y / baseHeight;
-    
+
     // Find step index from slider value (0-1 range mapped to steps)
     const stepIndex = Math.round(raw * (steps.height.length - 1));
     const targetScale = steps.height[Math.max(0, Math.min(stepIndex, steps.height.length - 1))];
-    
+
     // Apply step-based scaling
     if (!selectedObject.userData.baseHeight) {
         selectedObject.userData.baseHeight = currentSize.y;
         selectedObject.userData.baseWidth = currentSize.x;
         selectedObject.userData.baseDepth = currentSize.z;
     }
-    
+
     selectedObject.scale.y = targetScale / selectedObject.userData.baseHeight;
-    
+
     // For electronics, maintain aspect ratio
     if (t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop') {
         const aspectRatio = selectedObject.userData.baseWidth / selectedObject.userData.baseHeight;
@@ -760,27 +758,27 @@ document.getElementById('prop-width').oninput = (e) => {
     if (!selectedObject) return;
     const t = (selectedObject.userData && selectedObject.userData.type) || '';
     const raw = parseFloat(e.target.value);
-    
+
     if (isNaN(raw)) return;
-    
+
     const steps = getScaleSteps(t);
     const currentBbox = new THREE.Box3().setFromObject(selectedObject);
     const currentSize = new THREE.Vector3();
     currentBbox.getSize(currentSize);
-    
+
     // Initialize base dimensions if needed
     if (!selectedObject.userData.baseHeight) {
         selectedObject.userData.baseHeight = currentSize.y;
         selectedObject.userData.baseWidth = currentSize.x;
         selectedObject.userData.baseDepth = currentSize.z;
     }
-    
+
     // Find step index from slider value
     const stepIndex = Math.round(raw * (steps.width.length - 1));
     const targetScale = steps.width[Math.max(0, Math.min(stepIndex, steps.width.length - 1))];
-    
+
     const isElectronics = t === 'computer' || t === 'electronics' || t === 'tv' || t === 'laptop';
-    
+
     if (isElectronics) {
         // Electronics: only scale width, keep depth thin
         selectedObject.scale.x = targetScale / selectedObject.userData.baseWidth;
@@ -990,19 +988,19 @@ console.log('Text command input found:', !!textCommandInput);
 const processTextCommand = async (command) => {
     console.log('Processing text command:', command);
     if (!command || !command.trim()) return;
-    
+
     // Use Gemini NLP for text commands if available
     if (window.geminiAPI) {
         try {
             const parsed = await window.geminiAPI.parseCommand(command);
             console.log('Gemini understood:', parsed);
-            
+
             if (parsed.error) {
                 updateStatus(`Error: ${parsed.error}`);
                 return;
             }
-            
-            // Execute Gemini commands if they exist and are valid
+
+            // Execute Gemini commands (multi-command support)
             if (parsed.commands && Array.isArray(parsed.commands) && parsed.commands.length > 0) {
                 for (const cmd of parsed.commands) {
                     if (cmd.action === 'insert' && cmd.object) {
@@ -1010,16 +1008,10 @@ const processTextCommand = async (command) => {
                         updateStatus(`Spawned ${cmd.object}`);
                     } else if (cmd.action === 'delete' && cmd.object) {
                         const success = deleteObjectByType(cmd.object);
-                        if (success) {
-                            updateStatus(`Deleted ${cmd.object}`);
-                        } else {
-                            updateStatus(`No ${cmd.object} found`);
-                        }
+                        updateStatus(success ? `Deleted ${cmd.object}` : `No ${cmd.object} found`);
                     } else if (cmd.action === 'clear') {
                         placedObjects.forEach(obj => {
-                            if (obj.userData.body) {
-                                world.removeBody(obj.userData.body);
-                            }
+                            if (obj.userData.body) world.removeBody(obj.userData.body);
                             scene.remove(obj);
                         });
                         placedObjects = [];
@@ -1028,53 +1020,46 @@ const processTextCommand = async (command) => {
                 }
                 return;
             }
-            
-            // Fallback for single command format
+
+            // Fallback for single command format from Gemini
             if (parsed.action && parsed.object) {
                 await spawnObject(parsed.object, parsed);
                 updateStatus(`Spawned ${parsed.object}`);
+                return;
             }
         } catch (error) {
             console.error('Gemini API error:', error);
             updateStatus('AI processing failed, using fallback');
         }
-    } else {
-        // Fallback to simple parsing if Gemini not available
-        const clauses = split(command);
-        const results = [];
-        
-        clauses.forEach(clause => {
-            const parsed = parseClause(clause);
-            if (parsed) results.push(parsed);
-        });
-        
-        if (results.length === 0) {
-            updateStatus("Command not recognized");
-            return;
-        }
-        
-        // Execute commands
-        for (const cmd of results) {
-            if (cmd.action === 'insert' && cmd.object) {
-                await spawnObject(cmd.object);
-                updateStatus(`Spawned ${cmd.object}`);
-            } else if (cmd.action === 'delete' && cmd.object) {
-                const success = deleteObjectByType(cmd.object);
-                if (success) {
-                    updateStatus(`Deleted ${cmd.object}`);
-                } else {
-                    updateStatus(`No ${cmd.object} found`);
-                }
-            } else if (cmd.action === 'clear') {
-                placedObjects.forEach(obj => {
-                    if (obj.userData.body) {
-                        world.removeBody(obj.userData.body);
-                    }
-                    scene.remove(obj);
-                });
-                placedObjects = [];
-                updateStatus("Scene Cleared");
-            }
+    }
+
+    // Fallback to local regex-based parsing
+    const clauses = split(command);
+    const results = [];
+    clauses.forEach(clause => {
+        const parsed = parseClause(clause);
+        if (parsed) results.push(parsed);
+    });
+
+    if (results.length === 0) {
+        updateStatus("Command not recognized");
+        return;
+    }
+
+    for (const cmd of results) {
+        if (cmd.action === 'insert' && cmd.object) {
+            await spawnObject(cmd.object);
+            updateStatus(`Spawned ${cmd.object}`);
+        } else if (cmd.action === 'delete' && cmd.object) {
+            const success = deleteObjectByType(cmd.object);
+            updateStatus(success ? `Deleted ${cmd.object}` : `No ${cmd.object} found`);
+        } else if (cmd.action === 'clear') {
+            placedObjects.forEach(obj => {
+                if (obj.userData.body) world.removeBody(obj.userData.body);
+                scene.remove(obj);
+            });
+            placedObjects = [];
+            updateStatus("Scene Cleared");
         }
     }
 };
@@ -1094,7 +1079,7 @@ if (textCommandInput) {
 }
 
 // --- 8. SAVE SYSTEM ---
-document.getElementById('save-btn').onclick = () => {
+document.getElementById('save-btn').onclick = async () => {
     const currentProjectId = localStorage.getItem('currentProject');
     const data = placedObjects.map(obj => ({
         type: obj.userData.type,
@@ -1105,26 +1090,26 @@ document.getElementById('save-btn').onclick = () => {
         baseWidth: obj.userData.baseWidth,
         baseDepth: obj.userData.baseDepth
     }));
-    
+
     if (currentProjectId) {
-        // Save to project
-        const projects = JSON.parse(localStorage.getItem('projects') || '[]');
-        const project = projects.find(p => p.id === currentProjectId);
-        if (project) {
-            project.data = { objects: data };
-            project.modified = Date.now();
-            localStorage.setItem('projects', JSON.stringify(projects));
-            updateStatus("Project Saved");
-            
-            // Update project name in header if available
-            const projectNameEl = document.getElementById('project-name');
-            if (projectNameEl) {
-                projectNameEl.textContent = project.name;
-            }
+        try {
+            const { error } = await supabase
+                .from('projects')
+                .update({
+                    data: { objects: data },
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', currentProjectId);
+
+            if (error) throw error;
+            updateStatus("Project Saved to Cloud");
             return;
+        } catch (error) {
+            console.error('Error saving to cloud:', error);
+            updateStatus("Cloud Save Failed");
         }
     }
-    
+
     // Fallback: download as JSON
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
@@ -1135,16 +1120,24 @@ document.getElementById('save-btn').onclick = () => {
 };
 
 // Load project data on workspace load
-window.loadWorkspace = () => {
+window.loadWorkspace = async () => {
     const currentProjectId = localStorage.getItem('currentProject');
-    if (currentProjectId) {
-        const projects = JSON.parse(localStorage.getItem('projects') || '[]');
-        const project = projects.find(p => p.id === currentProjectId);
+    if (!currentProjectId) return;
+
+    try {
+        const { data: project, error } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('id', currentProjectId)
+            .single();
+
+        if (error) throw error;
         if (project) {
             const projectNameEl = document.getElementById('project-name');
             if (projectNameEl) {
                 projectNameEl.textContent = project.name;
             }
+
             // Load project data if available
             if (project.data && project.data.objects) {
                 // Clear existing objects
@@ -1153,10 +1146,10 @@ window.loadWorkspace = () => {
                     scene.remove(obj);
                 });
                 placedObjects = [];
-                
+
                 // Load objects (async)
-                project.data.objects.forEach(async (objData) => {
-                    const model = await spawnObject(objData.type);
+                for (const objData of project.data.objects) {
+                    const model = await spawnObject(objData.type, objData);
                     if (model) {
                         model.position.set(objData.position.x, objData.position.y, objData.position.z);
                         model.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
@@ -1167,45 +1160,37 @@ window.loadWorkspace = () => {
                             model.userData.baseDepth = objData.baseDepth;
                         }
                     }
-                });
+                }
                 updateStatus("Project Loaded");
             }
         }
+    } catch (error) {
+        console.error('Error loading project:', error);
+        updateStatus("Load Failed");
     }
 };
 
 // --- 9. ANIMATION LOOP (PHYSICS + RENDER) ---
 let lastTime;
-
 function animate(time) {
     requestAnimationFrame(animate);
-
-    // Step physics world
     if (lastTime !== undefined) {
-        const delta = (time - lastTime) / 1000; // ms → seconds
-        const fixedTimeStep = 1 / 60;
-        world.step(fixedTimeStep, delta, 3);
-
-        // Sync Three.js meshes with Cannon.js bodies
+        const delta = (time - lastTime) / 1000;
+        world.step(1 / 60, delta, 3);
         placedObjects.forEach(obj => {
-            const body = obj.userData.body;
-            if (body) {
-                obj.position.copy(body.position);
-                obj.quaternion.copy(body.quaternion);
+            if (obj.userData.body) {
+                obj.position.copy(obj.userData.body.position);
+                obj.quaternion.copy(obj.userData.body.quaternion);
             }
         });
     }
     lastTime = time;
-
     controls.update();
     renderer.render(scene, camera);
 }
-
-console.log('Starting animation loop...');
 animate();
 
 // Preload common models
-console.log('Preloading models...');
 preloadModels(['sofa', 'lamp', 'plant']);
 
 window.onresize = () => {
@@ -1274,24 +1259,53 @@ function enablePhysics(obj) {
     body.wakeUp();
 }
 
-// Initialize voice system is already done above in section 6
-
 window.placeObject = async ({ type, color, scale, position }) => {
-  await startPreview(type);
-  if (previewObject) {
-    if (color) {
-      previewObject.traverse((obj) => {
-        if (obj.isMesh && obj.material && obj.material.setHex) {
-          obj.material.setHex(color);
+    await startPreview(type);
+    if (previewObject) {
+        if (color) {
+            previewObject.traverse((obj) => {
+                if (obj.isMesh && obj.material && obj.material.setHex) {
+                    obj.material.setHex(color);
+                }
+            });
         }
-      });
+        if (scale) {
+            previewObject.scale.set(scale, scale, scale);
+        }
+        if (position) {
+            previewObject.position.copy(position);
+        }
+        confirmPreview();
     }
-    if (scale) {
-      previewObject.scale.set(scale, scale, scale);
+};
+
+// --- 10. HELP MODAL LOGIC ---
+const helpModal = document.getElementById('help-modal');
+const helpBtn = document.getElementById('help-btn');
+const closeHelpBtn = document.getElementById('close-help-btn');
+const helpOkBtn = document.getElementById('help-ok-btn');
+
+if (helpBtn && helpModal) {
+    helpBtn.onclick = () => {
+        helpModal.classList.remove('hidden');
+    };
+}
+
+const hideHelp = () => {
+    if (helpModal) {
+        helpModal.classList.add('hidden');
     }
-    if (position) {
-      previewObject.position.copy(position);
+};
+
+if (closeHelpBtn) closeHelpBtn.onclick = hideHelp;
+if (helpOkBtn) helpOkBtn.onclick = hideHelp;
+
+// Initialize Workspace
+// (Removed initialization call from main.js to favor workspace.html onload)
+
+// Close on outside click
+window.onclick = (event) => {
+    if (event.target === helpModal) {
+        hideHelp();
     }
-    confirmPreview();
-  }
 };

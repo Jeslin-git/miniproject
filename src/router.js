@@ -3,7 +3,6 @@ export class Router {
     constructor() {
         this.routes = {};
         this.currentRoute = '';
-        this.init();
     }
 
     init() {
@@ -20,16 +19,19 @@ export class Router {
     }
 
     handleRoute() {
+        // Handle empty hash or root
         const hash = window.location.hash.slice(1) || '/';
-        const path = hash.split('?')[0];
-        
+        let path = hash.split('?')[0];
+
+        // Normalize path to have leading slash
+        if (!path.startsWith('/')) path = '/' + path;
+
         if (this.routes[path]) {
             this.currentRoute = path;
             this.routes[path]();
         } else {
-            // Default to login if route not found
-            const user = localStorage.getItem('user');
-            this.navigate(user ? '/dashboard' : '/login');
+            // Fallback to landing page if route not found
+            this.navigate('/');
         }
     }
 
