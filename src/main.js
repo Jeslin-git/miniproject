@@ -1133,6 +1133,7 @@ window.loadWorkspace = async () => {
 
         if (error) throw error;
         if (project) {
+            console.log('Project fetched from Supabase:', project.name);
             const projectNameEl = document.getElementById('project-name');
             if (projectNameEl) {
                 projectNameEl.textContent = project.name;
@@ -1309,3 +1310,7 @@ window.onclick = (event) => {
         hideHelp();
     }
 };
+
+// --- INITIALIZATION ---
+console.log('Workspace main.js loaded. Triggering load...');
+window.loadWorkspace();
