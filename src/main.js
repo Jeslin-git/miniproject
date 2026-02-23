@@ -178,6 +178,7 @@ const confirmPreview = () => {
     document.getElementById('property-panel').classList.remove('hidden');
     updateLampUI(); updateMaterialUI(); updateCarpetUI();
     hideCompass(); // Hide compass when object is placed
+    triggerAutoSave();
 };
 
 const cancelPreview = () => {
@@ -333,6 +334,58 @@ setupDropdown('vehicles-toggle', 'vehicles-grid');
 setupDropdown('characters-toggle', 'characters-grid');
 setupDropdown('props-toggle', 'props-grid');
 
+// --- Sidebar Search ---
+const mainSearch = document.getElementById('main-search');
+if (mainSearch) {
+    mainSearch.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const gridItems = document.querySelectorAll('.grid-item');
+        const categories = document.querySelectorAll('.category-container');
+
+        if (!query) {
+            // Reset to default state
+            gridItems.forEach(item => item.style.display = '');
+            categories.forEach(cat => cat.style.display = '');
+            // Close all dropdowns unless they were open before
+            // For now, just let user manage their states or keep them as is
+            return;
+        }
+
+        categories.forEach(cat => {
+            const grid = cat.querySelector('.dropdown-content');
+            const items = cat.querySelectorAll('.grid-item');
+            const header = cat.querySelector('.category-header');
+            let hasMatch = false;
+
+            items.forEach(item => {
+                const type = item.dataset.type.toLowerCase();
+                const name = item.querySelector('span').textContent.toLowerCase();
+                const isMatch = type.includes(query) || name.includes(query);
+
+                item.style.display = isMatch ? '' : 'none';
+                if (isMatch) hasMatch = true;
+            });
+
+            // If category header matches, show all its items
+            if (header.textContent.toLowerCase().includes(query)) {
+                hasMatch = true;
+                items.forEach(item => item.style.display = '');
+            }
+
+            if (hasMatch) {
+                cat.style.display = '';
+                // Auto-expand if match found
+                if (grid && !grid.classList.contains('open')) {
+                    grid.classList.add('open');
+                    header.classList.add('active');
+                }
+            } else {
+                cat.style.display = 'none';
+            }
+        });
+    });
+}
+
 // --- 4. SPAWNING LOGIC (Three + Cannon sync) ---
 const spawnObject = async (type, props = {}) => {
     const normalizedType = type
@@ -413,7 +466,7 @@ const spawnObject = async (type, props = {}) => {
         }
     }
 
-    // Apply Gemini properties if provided
+    // Apply properties if provided (from voice or cloud load)
     if (props) {
         // Apply color
         if (props.color) {
@@ -425,15 +478,30 @@ const spawnObject = async (type, props = {}) => {
             });
         }
 
-        // Apply size
+        // Apply size/scale
         if (props.size) {
             let scale = 1;
             if (props.size === 'small') scale = 0.5;
             else if (props.size === 'large') scale = 1.5;
             model.scale.set(scale, scale, scale);
+        } else if (props.scale) {
+            model.scale.set(props.scale.x || 1, props.scale.y || 1, props.scale.z || 1);
         }
 
-        // Apply material (basic mapping for now)
+        // Apply rotation
+        if (props.rotation) {
+            model.rotation.set(props.rotation.x || 0, props.rotation.y || 0, props.rotation.z || 0);
+        }
+
+        // Apply position
+        if (props.position) {
+            model.position.set(props.position.x || 0, props.position.y || 0, props.position.z || 0);
+        } else {
+            // Random position only if no position provided
+            model.position.set(Math.random() * 4 - 2, 2 + Math.random() * 2, Math.random() * 4 - 2);
+        }
+
+        // Apply material
         if (props.material) {
             const presets = {
                 wood: { color: 0x8d6e63, metalness: 0.05, roughness: 0.7 },
@@ -458,7 +526,6 @@ const spawnObject = async (type, props = {}) => {
         }
     }
 
-
     // Ensure model has proper userData
     if (!model.userData.type) {
         model.userData.type = normalizedType || type;
@@ -468,18 +535,18 @@ const spawnObject = async (type, props = {}) => {
     const bbox = new THREE.Box3().setFromObject(model);
     const size = new THREE.Vector3();
     bbox.getSize(size);
-    model.userData.baseHeight = size.y;
-    model.userData.baseWidth = size.x;
-    model.userData.baseDepth = size.z;
-
-    // Position randomly above the ground so gravity can act
-    model.position.set(Math.random() * 4 - 2, 2 + Math.random() * 2, Math.random() * 4 - 2);
+    model.userData.baseHeight = props.baseHeight || size.y;
+    model.userData.baseWidth = props.baseWidth || size.x;
+    model.userData.baseDepth = props.baseDepth || size.z;
 
     // Add to scene & physics
     scene.add(model);
     addPhysicsBodyForModel(model);
     placedObjects.push(model);
     updateStatus(`Spawned ${model.userData.type}`);
+
+    // Trigger auto-save
+    triggerAutoSave();
 
     return model;
 };
@@ -499,6 +566,7 @@ function deleteObjectByType(type) {
             scene.remove(model);
             placedObjects.splice(i, 1);
             updateStatus(`Deleted ${normalized}`);
+            triggerAutoSave();
             return true;
         }
     }
@@ -638,6 +706,7 @@ renderer.domElement.addEventListener('pointerup', () => {
 
     enablePhysics(selectedObject);
     isDragging = false;
+    triggerAutoSave();
 });
 
 //keyboard rotation
@@ -663,6 +732,7 @@ function rotateSelected(angle) {
             )
         );
     }
+    triggerAutoSave();
 }
 
 
@@ -752,6 +822,7 @@ document.getElementById('prop-height').oninput = (e) => {
         const aspectRatio = selectedObject.userData.baseWidth / selectedObject.userData.baseHeight;
         selectedObject.scale.x = (targetScale * aspectRatio) / selectedObject.userData.baseWidth;
     }
+    triggerAutoSave();
 };
 
 document.getElementById('prop-width').oninput = (e) => {
@@ -791,6 +862,7 @@ document.getElementById('prop-width').oninput = (e) => {
         selectedObject.scale.x = targetScale / selectedObject.userData.baseWidth;
         selectedObject.scale.z = targetScale / selectedObject.userData.baseDepth;
     }
+    triggerAutoSave();
 };
 
 // Color picker -> apply to all meshes of selected object (supports multi-material)
@@ -808,6 +880,7 @@ document.getElementById('prop-color').oninput = (e) => {
             });
         }
     });
+    triggerAutoSave();
 };
 
 
@@ -931,6 +1004,7 @@ document.getElementById('delete-obj-btn').onclick = () => {
         updateStatus("Object Deleted");
         updateLampUI(); updateMaterialUI(); updateCarpetUI();
         showCompass(); // Show compass when object is deleted
+        triggerAutoSave();
     }
 };
 
@@ -951,6 +1025,7 @@ const voiceManager = new VoiceManager({
         });
         placedObjects = [];
         updateStatus("Scene Cleared");
+        triggerAutoSave();
     },
     updateStatus: updateStatus,
     geminiAPI: geminiAPI
@@ -1009,6 +1084,7 @@ const processTextCommand = async (command) => {
                     } else if (cmd.action === 'delete' && cmd.object) {
                         const success = deleteObjectByType(cmd.object);
                         updateStatus(success ? `Deleted ${cmd.object}` : `No ${cmd.object} found`);
+                        if (success) triggerAutoSave(); // Added triggerAutoSave
                     } else if (cmd.action === 'clear') {
                         placedObjects.forEach(obj => {
                             if (obj.userData.body) world.removeBody(obj.userData.body);
@@ -1016,6 +1092,7 @@ const processTextCommand = async (command) => {
                         });
                         placedObjects = [];
                         updateStatus("Scene Cleared");
+                        triggerAutoSave();
                     }
                 }
                 return;
@@ -1079,50 +1156,17 @@ if (textCommandInput) {
 }
 
 // --- 8. SAVE SYSTEM ---
-document.getElementById('save-btn').onclick = async () => {
-    const currentProjectId = localStorage.getItem('currentProject');
-    const data = placedObjects.map(obj => ({
-        type: obj.userData.type,
-        position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
-        scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
-        rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
-        baseHeight: obj.userData.baseHeight,
-        baseWidth: obj.userData.baseWidth,
-        baseDepth: obj.userData.baseDepth
-    }));
-
-    if (currentProjectId) {
-        try {
-            const { error } = await supabase
-                .from('projects')
-                .update({
-                    data: { objects: data },
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', currentProjectId);
-
-            if (error) throw error;
-            updateStatus("Project Saved to Cloud");
-            return;
-        } catch (error) {
-            console.error('Error saving to cloud:', error);
-            updateStatus("Cloud Save Failed");
-        }
-    }
-
-    // Fallback: download as JSON
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'ar-scene.json';
-    link.click();
-    updateStatus("Scene Exported");
-};
+// Save functionality is now handled by saveProject() in the AUTO-SAVE section
 
 // Load project data on workspace load
 window.loadWorkspace = async () => {
     const currentProjectId = localStorage.getItem('currentProject');
-    if (!currentProjectId) return;
+    if (!currentProjectId) {
+        console.warn('No project ID found in localStorage');
+        return;
+    }
+
+    updateStatus("Loading Project...");
 
     try {
         const { data: project, error } = await supabase
@@ -1141,35 +1185,95 @@ window.loadWorkspace = async () => {
 
             // Load project data if available
             if (project.data && project.data.objects) {
-                // Clear existing objects
+                // Clear existing objects first to avoid duplicates on reload
                 placedObjects.forEach(obj => {
                     if (obj.userData.body) world.removeBody(obj.userData.body);
                     scene.remove(obj);
                 });
                 placedObjects = [];
 
-                // Load objects (async)
+                console.log(`Spawning ${project.data.objects.length} objects...`);
+
+                // Spawn objects sequentially to maintain order and ensure physics bodies match positions
                 for (const objData of project.data.objects) {
-                    const model = await spawnObject(objData.type, objData);
-                    if (model) {
-                        model.position.set(objData.position.x, objData.position.y, objData.position.z);
-                        model.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-                        model.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
-                        if (objData.baseHeight) {
-                            model.userData.baseHeight = objData.baseHeight;
-                            model.userData.baseWidth = objData.baseWidth;
-                            model.userData.baseDepth = objData.baseDepth;
-                        }
-                    }
+                    await spawnObject(objData.type, objData);
                 }
+
                 updateStatus("Project Loaded");
+            } else {
+                updateStatus("Empty Project Ready");
             }
         }
     } catch (error) {
         console.error('Error loading project:', error);
-        updateStatus("Load Failed");
+        updateStatus("Load Failed: " + error.message);
     }
 };
+
+// --- AUTO-SAVE LOGIC ---
+let autoSaveTimeout = null;
+const AUTO_SAVE_DELAY = 3000; // 3 seconds
+
+const triggerAutoSave = () => {
+    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = setTimeout(saveProject, AUTO_SAVE_DELAY);
+};
+
+const saveProject = async () => {
+    const currentProjectId = localStorage.getItem('currentProject');
+    if (!currentProjectId) return;
+
+    const data = placedObjects.map(obj => ({
+        type: obj.userData.type,
+        position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+        scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+        rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+        baseHeight: obj.userData.baseHeight,
+        baseWidth: obj.userData.baseWidth,
+        baseDepth: obj.userData.baseDepth,
+        color: obj.userData.color // Include color if tracked
+    }));
+
+    try {
+        console.log('Auto-saving project...');
+        const { error } = await supabase
+            .from('projects')
+            .update({
+                data: { objects: data },
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', currentProjectId);
+
+        if (error) throw error;
+        updateStatus("Project Saved");
+    } catch (error) {
+        console.error('Error auto-saving:', error);
+        updateStatus("Save Failed");
+    }
+};
+
+// Update existing save button to use the same logic
+if (document.getElementById('save-btn')) {
+    document.getElementById('save-btn').onclick = async () => {
+        updateStatus("Saving...");
+        await saveProject();
+    };
+}
+
+// Workspace Logout
+if (document.getElementById('logout-btn')) {
+    document.getElementById('logout-btn').onclick = async () => {
+        if (confirm('Are you sure you want to sign out?')) {
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+                alert('Logout failed: ' + error.message);
+            } else {
+                localStorage.removeItem('currentProject');
+                window.location.href = '/#login';
+            }
+        }
+    };
+}
 
 // --- 9. ANIMATION LOOP (PHYSICS + RENDER) ---
 let lastTime;

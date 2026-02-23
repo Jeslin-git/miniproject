@@ -49,10 +49,10 @@ export async function setupLandingHandlers() {
                 <button class="btn-primary" onclick="window.router.navigate('/dashboard')">Go to Dashboard</button>
                 <button class="btn-secondary" id="landing-logout-btn">Sign Out</button>
             `;
-            const logoutBtn = document.getElementById('landing-logout-btn');
             if (logoutBtn) {
                 logoutBtn.onclick = async () => {
                     await supabase.auth.signOut();
+                    localStorage.removeItem('currentProject');
                     window.location.reload();
                 };
             }

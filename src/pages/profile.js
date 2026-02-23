@@ -92,8 +92,14 @@ export function setupProfileHandlers() {
         if (logoutBtn) {
             logoutBtn.onclick = async () => {
                 if (confirm('Are you sure you want to sign out?')) {
-                    await supabase.auth.signOut();
-                    window.location.hash = '#login';
+                    const { error } = await supabase.auth.signOut();
+                    if (error) {
+                        console.error('Sign out error:', error);
+                        alert('Error signing out: ' + error.message);
+                    } else {
+                        localStorage.removeItem('currentProject');
+                        window.location.hash = '#login';
+                    }
                 }
             };
         }

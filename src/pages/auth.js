@@ -71,6 +71,14 @@ export function setupAuthHandlers() {
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
             const errorDiv = document.getElementById('login-error');
+            const submitBtn = loginForm.querySelector('button[type="submit"]');
+
+            // Clear previous errors
+            errorDiv.textContent = '';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing in...';
+
+            console.log('Login attempt for:', email);
 
             try {
                 const { data, error } = await supabase.auth.signInWithPassword({
@@ -79,12 +87,18 @@ export function setupAuthHandlers() {
                 });
 
                 if (error) {
+                    console.error('Login error:', error);
                     errorDiv.textContent = error.message;
                 } else {
+                    console.log('Login successful, navigating to dashboard');
                     window.location.hash = '#dashboard';
                 }
             } catch (err) {
-                errorDiv.textContent = 'Auth error: ' + err.message;
+                console.error('Unexpected auth error:', err);
+                errorDiv.textContent = 'Auth error: ' + (err.message || 'Unknown error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Sign in';
             }
         });
     }
