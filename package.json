@@ -27,6 +27,7 @@
     "three-orbit-controls": "^82.1.0"
   },
   "devDependencies": {
+    "supabase": "^2.76.12",
     "vite": "^7.3.0"
   }
 }

@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "my-ar-project"
+project_id = "ghibli-health-app"
 
 [api]
 enabled = true
@@ -26,7 +26,7 @@ enabled = false
 
 [db]
 # Port to use for the local database URL.
-port = 54322
+port = 54335
 # Port used by db diff command to initialize the shadow database.
 shadow_port = 54320
 # Maximum amount of time to wait for health check when starting the local database.
