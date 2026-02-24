@@ -22,7 +22,11 @@ export function setupProfileHandlers() {
         if (!session) return;
 
         const user = session.user;
-        const projects = JSON.parse(localStorage.getItem('projects') || '[]');
+        const { data: projects } = await supabase
+            .from('projects')
+            .select('id')
+            .eq('user_id', user.id);
+        const projectCount = projects ? projects.length : 0;
 
         const content = document.getElementById('profile-content');
         if (content) {
@@ -42,7 +46,7 @@ export function setupProfileHandlers() {
                 
                 <div class="profile-stats">
                     <div class="stat-card">
-                        <div class="stat-value">${projects.length}</div>
+                        <div class="stat-value">${projectCount}</div>
                         <div class="stat-label">Projects</div>
                     </div>
                     <div class="stat-card">

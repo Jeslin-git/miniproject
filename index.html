@@ -4,14 +4,269 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Playground</title>
+    <title>PyScape – Kinetic Worlds, Crafted by Code</title>
+    <meta name="description"
+        content="PyScape is an immersive 3D AR playground. Create, design, and explore kinetic worlds crafted by code.">
     <link rel="stylesheet" href="/src/dashboard.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <style>
+        /* ===== SPLASH SCREEN ===== */
+        #splash-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            background: #060d17;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
+        }
+
+        #splash-screen.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .splash-logo-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Outer glowing ring */
+        .splash-ring {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 2px solid rgba(0, 242, 255, 0.7);
+            position: absolute;
+            animation: splashRingPulse 2s ease-in-out infinite;
+            box-shadow: 0 0 30px rgba(0, 242, 255, 0.4), inset 0 0 30px rgba(0, 242, 255, 0.1);
+        }
+
+        .splash-ring-2 {
+            width: 210px;
+            height: 210px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 242, 255, 0.25);
+            position: absolute;
+            animation: splashRingPulse 2s ease-in-out infinite 0.4s;
+        }
+
+        @keyframes splashRingPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 0.8;
+            }
+
+            50% {
+                transform: scale(1.04);
+                opacity: 1;
+            }
+        }
+
+        /* Hexagon PS logo */
+        .splash-hex-logo {
+            width: 130px;
+            height: 130px;
+            position: relative;
+            z-index: 2;
+            animation: splashLogoFloat 2.5s ease-in-out infinite;
+            filter: drop-shadow(0 0 18px rgba(0, 242, 255, 0.6));
+        }
+
+        @keyframes splashLogoFloat {
+
+            0%,
+            100% {
+                transform: translateY(0) rotate(0deg);
+            }
+
+            50% {
+                transform: translateY(-8px) rotate(2deg);
+            }
+        }
+
+        /* Orbiting dot */
+        .splash-orbit {
+            width: 180px;
+            height: 180px;
+            position: absolute;
+            animation: splashOrbit 3s linear infinite;
+        }
+
+        .splash-orbit::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            background: #00f2ff;
+            border-radius: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 10px #00f2ff;
+        }
+
+        @keyframes splashOrbit {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .splash-brand {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .splash-brand h1 {
+            font-family: 'Inter', sans-serif;
+            font-size: 36px;
+            font-weight: 800;
+            color: #fff;
+            margin: 0 0 4px 0;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff 40%, #00f2ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .splash-brand p {
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            color: rgba(0, 242, 255, 0.7);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        .splash-progress-bar {
+            margin-top: 40px;
+            width: 160px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .splash-progress-fill {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, #00f2ff, #00a8b5);
+            border-radius: 99px;
+            animation: splashProgress 2.6s ease forwards;
+        }
+
+        @keyframes splashProgress {
+            0% {
+                width: 0;
+            }
+
+            100% {
+                width: 100%;
+            }
+        }
+    </style>
 </head>
 
 <body>
+    <!-- ===== SPLASH SCREEN ===== -->
+    <div id="splash-screen">
+        <div class="splash-logo-wrap">
+            <div class="splash-ring-2"></div>
+            <div class="splash-ring"></div>
+            <div class="splash-orbit"></div>
+            <!-- Dynamic SVG hexagon PS logo -->
+            <svg class="splash-hex-logo" viewBox="0 0 130 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Outer hexagon -->
+                <polygon points="65,8 118,37 118,93 65,122 12,93 12,37" fill="url(#hexGrad1)"
+                    stroke="rgba(0,242,255,0.5)" stroke-width="1.5" />
+                <!-- Inner triangular facets -->
+                <polygon points="65,8 118,37 65,65" fill="url(#faceGrad1)" opacity="0.9" />
+                <polygon points="118,37 118,93 65,65" fill="url(#faceGrad2)" opacity="0.85" />
+                <polygon points="65,122 12,93 65,65" fill="url(#faceGrad3)" opacity="0.9" />
+                <polygon points="12,37 65,8 65,65" fill="url(#faceGrad4)" opacity="0.85" />
+                <polygon points="118,93 65,122 65,65" fill="url(#faceGrad5)" opacity="0.8" />
+                <polygon points="12,93 12,37 65,65" fill="url(#faceGrad6)" opacity="0.9" />
+                <!-- Corner dots -->
+                <circle cx="65" cy="8" r="4" fill="#f5c842" />
+                <circle cx="118" cy="37" r="4" fill="#f5c842" />
+                <circle cx="118" cy="93" r="4" fill="#f5c842" />
+                <circle cx="65" cy="122" r="4" fill="#f5c842" />
+                <circle cx="12" cy="93" r="4" fill="#f5c842" />
+                <circle cx="12" cy="37" r="4" fill="#f5c842" />
+                <!-- PS Text -->
+                <text x="50%" y="56%" dominant-baseline="middle" text-anchor="middle" font-family="Inter, sans-serif"
+                    font-weight="800" font-size="30" fill="url(#textGrad)" letter-spacing="-1">PS</text>
+                <defs>
+                    <linearGradient id="hexGrad1" x1="12" y1="8" x2="118" y2="122" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#0d2d4a" />
+                        <stop offset="100%" stop-color="#0a1f35" />
+                    </linearGradient>
+                    <linearGradient id="faceGrad1" x1="65" y1="8" x2="118" y2="65" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#1a6090" />
+                        <stop offset="100%" stop-color="#0e3a5c" />
+                    </linearGradient>
+                    <linearGradient id="faceGrad2" x1="118" y1="37" x2="65" y2="93" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#22a0b8" />
+                        <stop offset="100%" stop-color="#0d6b82" />
+                    </linearGradient>
+                    <linearGradient id="faceGrad3" x1="65" y1="122" x2="12" y2="65" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#1a7a90" />
+                        <stop offset="100%" stop-color="#0d4f62" />
+                    </linearGradient>
+                    <linearGradient id="faceGrad4" x1="12" y1="37" x2="65" y2="65" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#124e78" />
+                        <stop offset="100%" stop-color="#0a2f4a" />
+                    </linearGradient>
+                    <linearGradient id="faceGrad5" x1="118" y1="93" x2="65" y2="122" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#1a9090" />
+                        <stop offset="100%" stop-color="#0d5858" />
+                    </linearGradient>
+                    <linearGradient id="faceGrad6" x1="12" y1="93" x2="12" y2="37" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#0e3e6a" />
+                        <stop offset="100%" stop-color="#081e35" />
+                    </linearGradient>
+                    <linearGradient id="textGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#7fff44" />
+                        <stop offset="100%" stop-color="#39e000" />
+                    </linearGradient>
+                </defs>
+            </svg>
+        </div>
+        <div class="splash-brand">
+            <h1>PyScape</h1>
+            <p>Kinetic Worlds, Crafted by Code</p>
+        </div>
+        <div class="splash-progress-bar">
+            <div class="splash-progress-fill"></div>
+        </div>
+    </div>
+
+    <!-- ===== MAIN APP ===== -->
     <div id="app"></div>
     <script type="module" src="/src/app.js"></script>
+    <script>
+        // Auto-dismiss splash after 3s
+        setTimeout(() => {
+            const splash = document.getElementById('splash-screen');
+            if (splash) {
+                splash.classList.add('fade-out');
+                setTimeout(() => splash.remove(), 900);
+            }
+        }, 3000);
+    </script>
 </body>
 
 </html>

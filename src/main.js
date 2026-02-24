@@ -162,6 +162,18 @@ const confirmPreview = () => {
     previewObject.userData.baseWidth = size.x;
     previewObject.userData.baseDepth = size.z;
 
+    // Snapshot initial placement position so it survives physics drift
+    previewObject.userData.savedPosition = {
+        x: previewObject.position.x,
+        y: previewObject.position.y,
+        z: previewObject.position.z
+    };
+    previewObject.userData.savedRotation = {
+        x: previewObject.rotation.x,
+        y: previewObject.rotation.y,
+        z: previewObject.rotation.z
+    };
+
     addPhysicsBodyForModel(previewObject);
     placedObjects.push(previewObject);
     selectedObject = previewObject;
@@ -539,6 +551,24 @@ const spawnObject = async (type, props = {}) => {
     model.userData.baseWidth = props.baseWidth || size.x;
     model.userData.baseDepth = props.baseDepth || size.z;
 
+    // Snapshot position/rotation so physics drift doesn't overwrite the save
+    if (props.position) {
+        model.userData.savedPosition = { ...props.position };
+    }
+    if (props.rotation) {
+        model.userData.savedRotation = { ...props.rotation };
+    }
+
+    // Restore persisted color
+    if (props.color) {
+        model.userData.color = props.color;
+    }
+
+    // Restore persisted material
+    if (props.material) {
+        model.userData.material = props.material;
+    }
+
     // Add to scene & physics
     scene.add(model);
     addPhysicsBodyForModel(model);
@@ -706,6 +736,18 @@ renderer.domElement.addEventListener('pointerup', () => {
 
     enablePhysics(selectedObject);
     isDragging = false;
+
+    // Snapshot the final user-placed position so saveProject reads this, not the live physics pos
+    selectedObject.userData.savedPosition = {
+        x: selectedObject.position.x,
+        y: selectedObject.position.y,
+        z: selectedObject.position.z
+    };
+    selectedObject.userData.savedRotation = {
+        x: selectedObject.rotation.x,
+        y: selectedObject.rotation.y,
+        z: selectedObject.rotation.z
+    };
     triggerAutoSave();
 });
 
@@ -721,6 +763,13 @@ window.addEventListener('keydown', (e) => {
 
 function rotateSelected(angle) {
     selectedObject.rotation.y += angle;
+
+    // Keep snapshot up to date so saveProject uses the latest rotation
+    selectedObject.userData.savedRotation = {
+        x: selectedObject.rotation.x,
+        y: selectedObject.rotation.y,
+        z: selectedObject.rotation.z
+    };
 
     if (selectedObject.userData.body) {
         selectedObject.userData.body.quaternion.copy(
@@ -869,6 +918,8 @@ document.getElementById('prop-width').oninput = (e) => {
 document.getElementById('prop-color').oninput = (e) => {
     if (!selectedObject) return;
     const hex = e.target.value;
+    // Persist to userData so saveProject can read it
+    selectedObject.userData.color = hex;
     selectedObject.traverse((c) => {
         if (c.isMesh) {
             const materials = Array.isArray(c.material) ? c.material : [c.material];
@@ -1223,16 +1274,22 @@ const saveProject = async () => {
     const currentProjectId = localStorage.getItem('currentProject');
     if (!currentProjectId) return;
 
-    const data = placedObjects.map(obj => ({
-        type: obj.userData.type,
-        position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
-        scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
-        rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
-        baseHeight: obj.userData.baseHeight,
-        baseWidth: obj.userData.baseWidth,
-        baseDepth: obj.userData.baseDepth,
-        color: obj.userData.color // Include color if tracked
-    }));
+    const data = placedObjects.map(obj => {
+        // Use the user-placed snapshot position to avoid physics drift corrupting the save
+        const pos = obj.userData.savedPosition || { x: obj.position.x, y: obj.position.y, z: obj.position.z };
+        const rot = obj.userData.savedRotation || { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
+        return {
+            type: obj.userData.type,
+            position: pos,
+            scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+            rotation: rot,
+            baseHeight: obj.userData.baseHeight,
+            baseWidth: obj.userData.baseWidth,
+            baseDepth: obj.userData.baseDepth,
+            color: obj.userData.color,
+            material: obj.userData.material
+        };
+    });
 
     try {
         console.log('Auto-saving project...');
@@ -1332,6 +1389,8 @@ if (materialSelect) {
         };
         const p = presets[choice] || presets.wood;
 
+        // Persist material choice to userData so saveProject can restore it
+        selectedObject.userData.material = choice;
         selectedObject.traverse((c) => {
             if (c.isMesh) {
                 const mats = Array.isArray(c.material) ? c.material : [c.material];
@@ -1344,6 +1403,7 @@ if (materialSelect) {
                 });
             }
         });
+        triggerAutoSave();
     };
 }
 

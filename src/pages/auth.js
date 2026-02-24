@@ -5,6 +5,7 @@ export function renderLogin() {
     return `
         <div class="auth-page">
             <div class="auth-container animate-in">
+                <a class="auth-back-link" onclick="window.router.navigate('/')" href="#">← Back to Home</a>
                 <div class="auth-header">
                     <h1>Welcome back</h1>
                     <p>Sign in to your account</p>
@@ -33,6 +34,7 @@ export function renderSignup() {
     return `
         <div class="auth-page">
             <div class="auth-container animate-in">
+                <a class="auth-back-link" onclick="window.router.navigate('/')" href="#">← Back to Home</a>
                 <div class="auth-header">
                     <h1>Create an account</h1>
                     <p>Join our gratitude community</p>
