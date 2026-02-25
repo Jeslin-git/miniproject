@@ -28,6 +28,17 @@ if (!fs.existsSync(dataDir)) {
 // Routes
 app.use('/api/dashboard', dashboardRoutes);
 
+// Expose minimal runtime config (reads from .env)
+app.get('/api/config', (req, res) => {
+    try {
+        const geminiKey = process.env.GEMINI_API_KEY || null;
+        res.json({ geminiKey });
+    } catch (err) {
+        console.error('Failed to read config', err);
+        res.status(500).json({ geminiKey: null, error: err.message });
+    }
+});
+
 // Error handler
 app.use((err, req, res, next) => {
     console.error('SERVER ERROR:', err);

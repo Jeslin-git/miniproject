@@ -1060,52 +1060,76 @@ document.getElementById('delete-obj-btn').onclick = () => {
 };
 
 // --- 6. VOICE SYSTEM ---
-// Initialize Gemini NLP with your API key
-const geminiAPI = new GeminiNLP('AIzaSyCYC-10Hpg7noEFrcWUx7BKNzlQNm-bPuI'); // <- REPLACE THIS WITH YOUR KEY
-window.geminiAPI = geminiAPI;
+// Load Gemini API key from server (.env) and initialize VoiceManager
+let geminiAPI = null;
+window.geminiAPI = null;
+let voiceManager = null;
 
-const voiceManager = new VoiceManager({
-    spawnObject: spawnObject,
-    deleteObjectByType: deleteObjectByType,
-    clearScene: () => {
-        placedObjects.forEach(obj => {
-            if (obj.userData.body) {
-                world.removeBody(obj.userData.body);
+const initVoiceSystem = async () => {
+    try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+            const cfg = await res.json();
+            if (cfg && cfg.geminiKey) {
+                geminiAPI = new GeminiNLP(cfg.geminiKey);
+                window.geminiAPI = geminiAPI;
+                console.log('Gemini key loaded from server');
+            } else {
+                console.warn('No Gemini key provided by server; continuing without AI key');
             }
-            scene.remove(obj);
-        });
-        placedObjects = [];
-        updateStatus("Scene Cleared");
-        triggerAutoSave();
-    },
-    updateStatus: updateStatus,
-    geminiAPI: geminiAPI
-});
-
-// Mic button click handler with debugging
-const micBtn = document.getElementById('mic-trigger');
-console.log('Mic button found:', !!micBtn);
-if (micBtn) {
-    micBtn.onclick = () => {
-        console.log('Mic button clicked');
-        if (!voiceManager.isSupported()) {
-            console.log('Voice recognition not supported');
-            const voicePopup = document.getElementById('voice-popup');
-            const cmdDisplay = document.getElementById('command-display');
-            if (voicePopup && cmdDisplay) {
-                cmdDisplay.innerText = "Voice recognition not supported in this browser. Please use Chrome or Edge.";
-                voicePopup.classList.remove('hidden');
-                setTimeout(() => voicePopup.classList.add('hidden'), 3000);
-            }
-            return;
+        } else {
+            console.warn('Failed to fetch config:', res.status);
         }
+    } catch (err) {
+        console.error('Error fetching config:', err);
+    }
 
-        console.log('Starting voice recognition...');
-        voiceManager.startListening();
-    };
-} else {
-    console.error('Microphone button not found!');
-}
+    voiceManager = new VoiceManager({
+        spawnObject: spawnObject,
+        deleteObjectByType: deleteObjectByType,
+        clearScene: () => {
+            placedObjects.forEach(obj => {
+                if (obj.userData.body) {
+                    world.removeBody(obj.userData.body);
+                }
+                scene.remove(obj);
+            });
+            placedObjects = [];
+            updateStatus("Scene Cleared");
+            triggerAutoSave();
+        },
+        updateStatus: updateStatus,
+        geminiAPI: geminiAPI
+    });
+    window.voiceManager = voiceManager;
+
+    // Mic button click handler with debugging
+    const micBtn = document.getElementById('mic-trigger');
+    console.log('Mic button found:', !!micBtn);
+    if (micBtn) {
+        micBtn.onclick = () => {
+            console.log('Mic button clicked');
+            if (!voiceManager.isSupported()) {
+                console.log('Voice recognition not supported');
+                const voicePopup = document.getElementById('voice-popup');
+                const cmdDisplay = document.getElementById('command-display');
+                if (voicePopup && cmdDisplay) {
+                    cmdDisplay.innerText = "Voice recognition not supported in this browser. Please use Chrome or Edge.";
+                    voicePopup.classList.remove('hidden');
+                    setTimeout(() => voicePopup.classList.add('hidden'), 3000);
+                }
+                return;
+            }
+
+            console.log('Starting voice recognition...');
+            voiceManager.startListening();
+        };
+    } else {
+        console.error('Microphone button not found!');
+    }
+};
+
+initVoiceSystem();
 
 // --- 7. TEXT COMMAND SYSTEM ---
 const textCommandInput = document.getElementById('text-command-input');
