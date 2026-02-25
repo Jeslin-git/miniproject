@@ -27,8 +27,20 @@ router.register('/signup', () => {
 });
 
 router.register('/dashboard', async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    console.log('Navigating to dashboard...');
+    // Small delay to ensure session is updated if just logged in
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const { data: { session }, error } = await supabase.auth.getSession();
+
+    if (error) {
+        console.error('Session check error:', error);
+        router.navigate('/login');
+        return;
+    }
+
     if (!session) {
+        console.log('No session found on dashboard route, redirecting to login');
         router.navigate('/login');
         return;
     }
@@ -36,6 +48,7 @@ router.register('/dashboard', async () => {
 });
 
 router.register('/profile', async () => {
+    console.log('Navigating to profile...');
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
         router.navigate('/login');
@@ -65,6 +78,15 @@ function renderPage(html) {
 // Initialize app
 function initApp() {
     router.init();
+
+    // Global auth listener
+    supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+            console.log('User signed out, redirecting...');
+            localStorage.removeItem('currentProject');
+            window.location.hash = '#login';
+        }
+    });
 }
 
 if (document.readyState === 'loading') {

@@ -5,6 +5,7 @@ export function renderLogin() {
     return `
         <div class="auth-page">
             <div class="auth-container animate-in">
+                <a class="auth-back-link" onclick="window.router.navigate('/')" href="#">← Back to Home</a>
                 <div class="auth-header">
                     <h1>Welcome back</h1>
                     <p>Sign in to your account</p>
@@ -33,6 +34,7 @@ export function renderSignup() {
     return `
         <div class="auth-page">
             <div class="auth-container animate-in">
+                <a class="auth-back-link" onclick="window.router.navigate('/')" href="#">← Back to Home</a>
                 <div class="auth-header">
                     <h1>Create an account</h1>
                     <p>Join our gratitude community</p>
@@ -71,6 +73,14 @@ export function setupAuthHandlers() {
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
             const errorDiv = document.getElementById('login-error');
+            const submitBtn = loginForm.querySelector('button[type="submit"]');
+
+            // Clear previous errors
+            errorDiv.textContent = '';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing in...';
+
+            console.log('Login attempt for:', email);
 
             try {
                 const { data, error } = await supabase.auth.signInWithPassword({
@@ -79,12 +89,18 @@ export function setupAuthHandlers() {
                 });
 
                 if (error) {
+                    console.error('Login error:', error);
                     errorDiv.textContent = error.message;
                 } else {
+                    console.log('Login successful, navigating to dashboard');
                     window.location.hash = '#dashboard';
                 }
             } catch (err) {
-                errorDiv.textContent = 'Auth error: ' + err.message;
+                console.error('Unexpected auth error:', err);
+                errorDiv.textContent = 'Auth error: ' + (err.message || 'Unknown error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Sign in';
             }
         });
     }

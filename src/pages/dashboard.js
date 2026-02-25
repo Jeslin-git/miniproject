@@ -70,23 +70,51 @@ function formatDate(timestamp) {
 }
 
 export async function refreshDashboard() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { data: projects, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('updated_at', { ascending: false });
-
-    if (error) {
-        console.error('Error fetching projects:', error);
-        return;
-    }
-
+    console.log('Refreshing dashboard...');
     const app = document.getElementById('app');
-    if (app) {
-        app.innerHTML = renderDashboard(projects || []);
-        setupDashboardHandlers();
+
+    try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) throw sessionError;
+        if (!session) {
+            console.log('No session found, redirecting to login');
+            window.router.navigate('/login');
+            return;
+        }
+
+        const { data: projects, error } = await supabase
+            .from('projects')
+            .select('*')
+            .order('updated_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching projects:', error);
+            if (app) {
+                app.innerHTML = `
+                    <div class="dashboard-page">
+                        <div class="error-container" style="padding: 40px; text-align: center;">
+                            <h2>Database Error</h2>
+                            <p>${error.message}</p>
+                            ${error.code === 'PGRST116' || error.message.includes('not found') ?
+                        '<p style="color: var(--figma-text-secondary); margin-top: 10px;">The "projects" table might be missing. Please check your Supabase migrations.</p>' : ''}
+                            <button class="btn-primary" onclick="window.location.reload()" style="margin-top: 20px;">Retry</button>
+                        </div>
+                    </div>
+                `;
+            }
+            return;
+        }
+
+        if (app) {
+            app.innerHTML = renderDashboard(projects || []);
+            setupDashboardHandlers();
+        }
+    } catch (err) {
+        console.error('Fatal dashboard error:', err);
+        if (app) {
+            app.innerHTML = `<div class="error-message" style="margin: 20px;">Failed to load dashboard: ${err.message}</div>`;
+        }
     }
 }
 
@@ -149,9 +177,14 @@ export function setupDashboardHandlers() {
     if (logoutBtn) {
         logoutBtn.onclick = async () => {
             if (confirm('Are you sure you want to sign out?')) {
-                await supabase.auth.signOut();
-                localStorage.removeItem('currentProject');
-                window.router.navigate('/login');
+                const { error } = await supabase.auth.signOut();
+                if (error) {
+                    console.error('Sign out error:', error);
+                    alert('Error signing out: ' + error.message);
+                } else {
+                    localStorage.removeItem('currentProject');
+                    window.location.hash = '#login';
+                }
             }
         };
     }
