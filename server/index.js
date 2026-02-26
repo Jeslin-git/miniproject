@@ -5,7 +5,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import fs from 'fs';
 import path from 'path';
 
-dotenv.config();
+dotenv.config({ path: path.join(process.cwd(), '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -31,11 +31,21 @@ app.use('/api/dashboard', dashboardRoutes);
 // Expose minimal runtime config (reads from .env)
 app.get('/api/config', (req, res) => {
     try {
-        const geminiKey = process.env.GEMINI_API_KEY || null;
-        res.json({ geminiKey });
+        const rawGemini = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+        const rawPoly = process.env.VITE_POLY_PIZZA_API_KEY || process.env.POLY_PIZZA_API_KEY || '';
+
+        // Aggressive extraction: Gemini keys are typically 39 chars (AIzaSy...)
+        // PolyPizza keys are typically 32 char hex strings.
+        const geminiMatch = rawGemini.match(/AIzaSy[0-9a-zA-Z_-]{33}/);
+        const polyMatch = rawPoly.match(/[a-f0-9]{32}/i);
+
+        const geminiKey = geminiMatch ? geminiMatch[0] : null;
+        const polyPizzaKey = polyMatch ? polyMatch[0] : null;
+
+        res.json({ geminiKey, polyPizzaKey });
     } catch (err) {
         console.error('Failed to read config', err);
-        res.status(500).json({ geminiKey: null, error: err.message });
+        res.status(500).json({ geminiKey: null, polyPizzaKey: null, error: err.message });
     }
 });
 

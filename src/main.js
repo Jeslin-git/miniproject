@@ -1070,6 +1070,16 @@ const initVoiceSystem = async () => {
         const res = await fetch('/api/config');
         if (res.ok) {
             const cfg = await res.json();
+
+            // Set up PolyPizza API Key
+            if (cfg && cfg.polyPizzaKey) {
+                window.polyPizzaKey = cfg.polyPizzaKey;
+                console.log('PolyPizza API key loaded');
+            } else {
+                console.warn('No PolyPizza key provided by server');
+            }
+
+            // Set up Gemini API
             if (cfg && cfg.geminiKey) {
                 geminiAPI = new GeminiNLP(cfg.geminiKey);
                 window.geminiAPI = geminiAPI;
@@ -1138,6 +1148,12 @@ console.log('Text command input found:', !!textCommandInput);
 const processTextCommand = async (command) => {
     console.log('Processing text command:', command);
     if (!command || !command.trim()) return;
+
+    const normalized = command.toLowerCase().trim();
+    if (normalized === 'reset' || normalized === 'reset objects' || normalized === 'reset physics' || normalized === 'stand up') {
+        if (window.resetFallenObjects) window.resetFallenObjects();
+        return;
+    }
 
     // Use Gemini NLP for text commands if available
     if (window.geminiAPI) {
@@ -1354,6 +1370,27 @@ if (document.getElementById('logout-btn')) {
             }
         }
     };
+}
+
+// Physics Reset Button
+window.resetFallenObjects = () => {
+    placedObjects.forEach(obj => {
+        const body = obj.userData.body;
+        if (body && body.mass > 0) {
+            body.quaternion.set(0, 0, 0, 1);
+            body.velocity.set(0, 0, 0);
+            body.angularVelocity.set(0, 0, 0);
+            // Bump them slightly up so they settle smoothly
+            body.position.y += 0.5;
+            body.wakeUp();
+        }
+    });
+    updateStatus("Objects Reset");
+    triggerAutoSave();
+};
+
+if (document.getElementById('reset-physics-btn')) {
+    document.getElementById('reset-physics-btn').onclick = window.resetFallenObjects;
 }
 
 // --- 9. ANIMATION LOOP (PHYSICS + RENDER) ---
