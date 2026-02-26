@@ -13,10 +13,10 @@ export function createTable(width, height, depth) {
     // 4 Legs
     const legGeom = new THREE.BoxGeometry(0.1, height, 0.1);
     const legCoords = [
-        [width/2 - 0.1, height/2, depth/2 - 0.1],
-        [-width/2 + 0.1, height/2, depth/2 - 0.1],
-        [width/2 - 0.1, height/2, -depth/2 + 0.1],
-        [-width/2 + 0.1, height/2, -depth/2 + 0.1]
+        [width / 2 - 0.1, height / 2, depth / 2 - 0.1],
+        [-width / 2 + 0.1, height / 2, depth / 2 - 0.1],
+        [width / 2 - 0.1, height / 2, -depth / 2 + 0.1],
+        [-width / 2 + 0.1, height / 2, -depth / 2 + 0.1]
     ];
 
     legCoords.forEach(c => {
@@ -46,7 +46,7 @@ export function createChair(size = 1) {
 
     // 4 Small Legs
     const legGeom = new THREE.BoxGeometry(0.1, size * 0.5, 0.1);
-    for(let i=0; i<4; i++) {
+    for (let i = 0; i < 4; i++) {
         const leg = new THREE.Mesh(legGeom, material);
         // Position legs at corners
         leg.position.set(
@@ -191,8 +191,8 @@ export function createPlant(height = 1) {
     g.add(pot);
     for (let i = 0; i < 6; i++) {
         const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.5, 12), leafMat);
-        leaf.position.set((Math.random()-0.5)*0.3, 0.45 + Math.random()*0.4, (Math.random()-0.5)*0.3);
-        leaf.rotation.z = (Math.random()-0.5)*0.6;
+        leaf.position.set((Math.random() - 0.5) * 0.3, 0.45 + Math.random() * 0.4, (Math.random() - 0.5) * 0.3);
+        leaf.rotation.z = (Math.random() - 0.5) * 0.6;
         g.add(leaf);
     }
     g.userData.type = 'plant';
@@ -204,17 +204,17 @@ export function createCar(scale = 1) {
     const g = new THREE.Group();
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1565c0 });
     const tireMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.6*scale, 0.4*scale, 0.8*scale), bodyMat);
-    body.position.y = 0.3*scale;
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.9*scale, 0.35*scale, 0.75*scale), bodyMat);
-    cabin.position.set(0, 0.6*scale, 0);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.6 * scale, 0.4 * scale, 0.8 * scale), bodyMat);
+    body.position.y = 0.3 * scale;
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.9 * scale, 0.35 * scale, 0.75 * scale), bodyMat);
+    cabin.position.set(0, 0.6 * scale, 0);
     g.add(body, cabin);
-    const tireGeom = new THREE.CylinderGeometry(0.18*scale, 0.18*scale, 0.3*scale, 16);
+    const tireGeom = new THREE.CylinderGeometry(0.18 * scale, 0.18 * scale, 0.3 * scale, 16);
     for (let sx of [-0.6, 0.6]) {
         for (let sz of [-0.35, 0.35]) {
             const t = new THREE.Mesh(tireGeom, tireMat);
-            t.rotation.z = Math.PI/2;
-            t.position.set(sx*scale, 0.18*scale, sz*scale);
+            t.rotation.z = Math.PI / 2;
+            t.position.set(sx * scale, 0.18 * scale, sz * scale);
             g.add(t);
         }
     }
@@ -265,12 +265,12 @@ export function createHuman(scale = 1) {
     const skin = new THREE.MeshStandardMaterial({ color: 0xffcc99 });
     const shirt = new THREE.MeshStandardMaterial({ color: 0x42a5f5 });
     const pants = new THREE.MeshStandardMaterial({ color: 0x263238 });
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.15*scale, 16, 12), skin);
-    head.position.y = 1.6*scale;
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.18*scale, 0.22*scale, 0.5*scale, 12), shirt);
-    torso.position.y = 1.25*scale;
-    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.25*scale, 0.6*scale, 0.2*scale), pants);
-    legs.position.y = 0.75*scale;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.15 * scale, 16, 12), skin);
+    head.position.y = 1.6 * scale;
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.18 * scale, 0.22 * scale, 0.5 * scale, 12), shirt);
+    torso.position.y = 1.25 * scale;
+    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.25 * scale, 0.6 * scale, 0.2 * scale), pants);
+    legs.position.y = 0.75 * scale;
     g.add(head, torso, legs);
     g.userData.type = 'human';
     return g;
@@ -280,17 +280,17 @@ export function createHuman(scale = 1) {
 export function createDragon(scale = 1) {
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0x8e24aa });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.25*scale, 0.8*scale, 4, 12), mat);
-    body.position.y = 0.6*scale;
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.2*scale, 0.4*scale, 12), mat);
-    head.position.set(0.4*scale, 0.9*scale, 0);
-    head.rotation.z = -Math.PI/2;
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.25 * scale, 0.8 * scale, 4, 12), mat);
+    body.position.y = 0.6 * scale;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.2 * scale, 0.4 * scale, 12), mat);
+    head.position.set(0.4 * scale, 0.9 * scale, 0);
+    head.rotation.z = -Math.PI / 2;
     // wings
-    const wingGeom = new THREE.BoxGeometry(0.8*scale, 0.02*scale, 0.4*scale);
+    const wingGeom = new THREE.BoxGeometry(0.8 * scale, 0.02 * scale, 0.4 * scale);
     const wL = new THREE.Mesh(wingGeom, mat);
     const wR = new THREE.Mesh(wingGeom, mat);
-    wL.position.set(0, 0.9*scale, -0.3*scale);
-    wR.position.set(0, 0.9*scale, 0.3*scale);
+    wL.position.set(0, 0.9 * scale, -0.3 * scale);
+    wR.position.set(0, 0.9 * scale, 0.3 * scale);
     g.add(body, head, wL, wR);
     g.userData.type = 'dragon';
     return g;
@@ -322,3 +322,104 @@ export function createCarpet(width = 2, depth = 1.5) {
     return g;
 }
 
+// --- REFINED PROCEDURAL GENERATORS (3-TIER SYSTEM) ---
+
+export function generateProceduralTable(options = {}) {
+    const {
+        width = 2,
+        height = 0.75,
+        depth = 1,
+        color = 0x8B4513,
+        legThickness = 0.1
+    } = options;
+
+    const tableGroup = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({ color: color });
+
+    // Top
+    const top = new THREE.Mesh(new THREE.BoxGeometry(width, 0.1, depth), material);
+    top.position.y = height;
+    tableGroup.add(top);
+
+    // 4 Legs
+    const legGeom = new THREE.BoxGeometry(legThickness, height, legThickness);
+    const legCoords = [
+        [width / 2 - legThickness, height / 2, depth / 2 - legThickness],
+        [-width / 2 + legThickness, height / 2, depth / 2 - legThickness],
+        [width / 2 - legThickness, height / 2, -depth / 2 + legThickness],
+        [-width / 2 + legThickness, height / 2, -depth / 2 + legThickness]
+    ];
+
+    legCoords.forEach(c => {
+        const leg = new THREE.Mesh(legGeom, material);
+        leg.position.set(c[0], c[1], c[2]);
+        tableGroup.add(leg);
+    });
+
+    tableGroup.userData.type = 'table';
+    return tableGroup;
+}
+
+export function generateProceduralChair(options = {}) {
+    const {
+        seatHeight = 0.5,
+        backHeight = 1.0,
+        seatWidth = 0.5,
+        color = 0x8B4513,
+        hasArmrests = false
+    } = options;
+
+    const chairGroup = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({ color: color });
+
+    // Seat
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(seatWidth, 0.1, seatWidth), material);
+    seat.position.y = seatHeight;
+    chairGroup.add(seat);
+
+    // Backrest
+    const back = new THREE.Mesh(new THREE.BoxGeometry(seatWidth, backHeight - seatHeight, 0.1), material);
+    back.position.set(0, seatHeight + (backHeight - seatHeight) / 2, -seatWidth / 2 + 0.05);
+    chairGroup.add(back);
+
+    // Legs
+    const legGeom = new THREE.BoxGeometry(0.08, seatHeight, 0.08);
+    const legOffset = seatWidth / 2 - 0.05;
+    const legPositions = [
+        [legOffset, seatHeight / 2, legOffset],
+        [-legOffset, seatHeight / 2, legOffset],
+        [legOffset, seatHeight / 2, -legOffset],
+        [-legOffset, seatHeight / 2, -legOffset]
+    ];
+
+    legPositions.forEach(p => {
+        const leg = new THREE.Mesh(legGeom, material);
+        leg.position.set(p[0], p[1], p[2]);
+        chairGroup.add(leg);
+    });
+
+    if (hasArmrests) {
+        const armGeom = new THREE.BoxGeometry(0.05, 0.3, seatWidth);
+        const armL = new THREE.Mesh(armGeom, material);
+        armL.position.set(-seatWidth / 2 - 0.025, seatHeight + 0.2, 0);
+        const armR = new THREE.Mesh(armGeom, material);
+        armR.position.set(seatWidth / 2 + 0.025, seatHeight + 0.2, 0);
+        chairGroup.add(armL, armR);
+    }
+
+    chairGroup.userData.type = 'chair';
+    return chairGroup;
+}
+
+export function generateProceduralBox(options = {}) {
+    const {
+        size = 1,
+        color = 0x8B4513
+    } = options;
+    const geometry = new THREE.BoxGeometry(size, size, size);
+    const material = new THREE.MeshStandardMaterial({ color: color });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.y = size / 2;
+    mesh.userData.type = 'box';
+    return mesh;
+}

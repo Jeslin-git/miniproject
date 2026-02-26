@@ -1,8 +1,8 @@
 ﻿import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { createTable, createChair, createSofa, createArmchair, createOfficeChair, createBed, createLamp, createPlant, createCar, createFoodItem, createTool, createElectronics, createHuman, createDragon, createAnimal, createCarpet } from './utils/generators.js';
+import { createTable, createChair, createSofa, createArmchair, createOfficeChair, createBed, createLamp, createPlant, createCar, createFoodItem, createTool, createElectronics, createHuman, createDragon, createAnimal, createCarpet, generateProceduralTable, generateProceduralChair, generateProceduralBox } from './utils/generators.js';
 import { world, CANNON } from './components/physics.js';
-import { loadModel, preloadModels } from './utils/modelLoader.js';
+import { loadModel, prepareModel, loadModelFromUrl, preloadModels, getAvailableModels } from './utils/modelLoader.js';
 import { split, parseClause } from './utils/voice.js';
 import { VoiceManager } from './utils/voiceManager.js';
 import { GeminiNLP } from '../scripts/geminiNLP.js';
@@ -105,46 +105,48 @@ const applyGhostMaterial = (obj, asGhost) => {
 };
 
 // Build a model for preview using GLB if available, else procedural fallback
-const createModelForType = async (normalizedType) => {
-    let model;
+/**
+ * Create preview model for sidebar/UI
+ * Uses the same hybrid logic but without adding to scene
+ * 
+ * @param {string} type - Object type
+ * @returns {Promise<THREE.Object3D>} Preview model
+ */
+const createModelForType = async (type) => {
+    console.log(`👁️ Creating preview for: "${type}"`);
+    const normalizedType = type.toLowerCase().trim().split(' ')[0];
+
     try {
-        model = await loadModel(normalizedType);
-        console.log(`Loaded GLB model (preview): ${normalizedType}`);
+        // Try to load actual model
+        const model = await loadModel(normalizedType, {
+            tryPolyPizza: false,  // Don't use Poly.pizza for previews (faster)
+            scale: 0.8  // Slightly smaller for preview
+        });
+
+        const preview = prepareModel(model, {
+            autoScale: true,
+            targetSize: 1.5,
+            centerModel: true,
+            enableShadows: false  // Previews don't need shadows
+        });
+
+        return preview;
+
     } catch (error) {
-        console.log(`GLB not found for ${normalizedType} (preview), using procedural:`, error.message);
-        // Reuse your existing fallback mapping:
-        if (normalizedType === 'table') model = createTable(1.5, 0.8, 0.8);
-        else if (normalizedType === 'chair') model = createChair(0.7);
-        else if (normalizedType === 'sofa') model = createSofa(2, 1, 1);
-        else if (normalizedType === 'armchair') model = createArmchair(1);
-        else if (normalizedType === 'office' || normalizedType === 'officechair' || normalizedType === 'office-chair') model = createOfficeChair(1);
-        else if (normalizedType === 'bed') model = createBed(2, 0.6, 1.6);
-        else if (normalizedType === 'lamp') model = createLamp(1.2);
-        else if (normalizedType === 'plant' || normalizedType === 'plants') model = createPlant(1);
-        else if (normalizedType === 'dog' || normalizedType === 'cat' || normalizedType === 'animal' || normalizedType === 'animals') model = createAnimal('animal');
-        else if (normalizedType === 'car' || normalizedType === 'vehicle') model = createCar(1);
-        else if (normalizedType === 'food' || normalizedType === 'apple' || normalizedType === 'banana') model = createFoodItem(normalizedType);
-        else if (normalizedType === 'tool' || normalizedType === 'tools' || normalizedType === 'wrench') model = createTool('tool');
-        else if (normalizedType === 'electronics' || normalizedType === 'computer' || normalizedType === 'tv') model = createElectronics(normalizedType);
-        else if (normalizedType === 'carpet') model = createCarpet(2, 1.5);
-        else if (normalizedType === 'human' || normalizedType === 'character') model = createHuman(1);
-        else if (normalizedType === 'dragon' || normalizedType === 'fantasy') model = createDragon(1);
-        else if (normalizedType === 'cube') {
-            model = new THREE.Group();
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
-            mesh.position.y = 0.5;
-            model.add(mesh);
-            model.userData.type = 'cube';
+        console.log(`Preview fallback for "${normalizedType}": ${error.message}`);
+        // Fallback to procedural or primitive for preview
+        if (error.message === 'PROCEDURAL_GENERATION_REQUIRED') {
+            return spawnProceduralObject(normalizedType, { x: 0, y: 0, z: 0 }, {
+                color: 0xcccccc,  // Gray for preview
+                scale: 0.8
+            });
         } else {
-            model = new THREE.Group();
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff4b2b }));
-            mesh.position.y = 0.5;
-            model.add(mesh);
-            model.userData.type = normalizedType || 'object';
+            return spawnPrimitiveObject(normalizedType, { x: 0, y: 0, z: 0 }, {
+                color: 0xcccccc,
+                scale: 0.8
+            });
         }
     }
-    if (!model.userData.type) model.userData.type = normalizedType;
-    return model;
 };
 
 const confirmPreview = () => {
@@ -399,196 +401,404 @@ if (mainSearch) {
 }
 
 // --- 4. SPAWNING LOGIC (Three + Cannon sync) ---
-const spawnObject = async (type, props = {}) => {
-    const normalizedType = type
-        .toLowerCase()
-        .trim();
+/**
+ * Normalize keyword by removing common adjectives and leading/trailing whitespace.
+ * Ensures "beautiful sofa" -> "sofa" for model matching.
+ * 
+ * @param {string} keyword - Raw keyword
+ * @returns {string} Normalized keyword
+ */
+function normalizeKeyword(keyword) {
+    if (!keyword) return '';
 
-    // Improved type normalization to match object names better
-    let finalType = normalizedType;
-    if (normalizedType.includes('chair')) {
-        if (normalizedType.includes('office') || normalizedType.includes('desk')) finalType = 'officechair';
-        else if (normalizedType.includes('beautiful') || normalizedType.includes('arm')) finalType = 'armchair';
-        else finalType = 'chair';
-    } else if (normalizedType.includes('table') || normalizedType.includes('desk')) {
-        finalType = 'table';
+    // Convert to lowercase and trim
+    let normalized = keyword.toLowerCase().trim();
+
+    // List of common adjectives/filler to strip
+    const adjectives = [
+        'beautiful', 'pretty', 'cute', 'elegant', 'modern', 'vintage', 'old', 'new',
+        'fancy', 'simple', 'big', 'small', 'tiny', 'large', 'huge', 'a', 'an', 'the',
+        'comfy', 'comfortable', 'cool', 'awesome', 'great', 'nice', 'some', 'insert', 'spawn', 'add', 'put'
+    ];
+
+    // Split into words
+    let words = normalized.split(/\s+/);
+
+    // Filter out filler words
+    if (words.length > 1) {
+        words = words.filter(word => !adjectives.includes(word));
     }
 
-    let model;
+    if (words.length === 0) return normalized.split(/\s+/)[0] || '';
+
+    // Join remaining words to check for combined names like "officechair"
+    let result = words.join('');
+
+    // Check for specific library model names
+    if (result.includes('office') && result.includes('chair')) return 'officechair';
+    if (result.includes('arm') && result.includes('chair')) return 'armchair';
+    if (result.includes('bed')) return 'bed';
+    if (result.includes('sofa') || result.includes('couch')) return 'sofa';
+    if (result.includes('lamp') || result.includes('light')) return 'lamp';
+    if (result.includes('plant') || result.includes('tree')) return 'plant';
+    if (result.includes('table') || result.includes('desk')) return 'table';
+    if (result.includes('chair') || result.includes('seat')) return 'chair';
+
+    // Fallback: take the longest word that isn't an adjective
+    return words[words.length - 1];
+}
+
+/**
+ * Spawn object using procedural generation
+ * @param {string} keyword - Object type keyword
+ * @param {Object} position - {x, y, z} position
+ * @param {Object} props - Additional properties (color, scale, etc.)
+ * @returns {THREE.Group|THREE.Mesh} Generated object
+ */
+function spawnProceduralObject(keyword, position, props = {}) {
+    console.log(`📐 Procedural generation: "${keyword}"`);
+
+    const {
+        color = 0x8B4513,    // Default brown
+        scale = 1.0,
+        rotation = { x: 0, y: 0, z: 0 }
+    } = props;
+
+    let mesh;
+    const keywordLower = keyword.toLowerCase();
+
+    // Map keywords to procedural generators
+    switch (keywordLower) {
+        case 'table':
+        case 'desk':
+            mesh = generateProceduralTable({
+                width: 2 * (typeof scale === 'number' ? scale : 1),
+                height: 0.75 * (typeof scale === 'number' ? scale : 1),
+                depth: 1 * (typeof scale === 'number' ? scale : 1),
+                color: color,
+                legThickness: 0.1 * (typeof scale === 'number' ? scale : 1)
+            });
+            break;
+
+        case 'chair':
+        case 'seat':
+            mesh = generateProceduralChair({
+                seatHeight: 0.5 * (typeof scale === 'number' ? scale : 1),
+                backHeight: 1.0 * (typeof scale === 'number' ? scale : 1),
+                seatWidth: 0.5 * (typeof scale === 'number' ? scale : 1),
+                color: color,
+                hasArmrests: false
+            });
+            break;
+
+        case 'box':
+        case 'crate':
+        case 'cube':
+            mesh = generateProceduralBox({
+                size: 1 * (typeof scale === 'number' ? scale : 1),
+                color: color
+            });
+            break;
+
+        default:
+            console.warn(`⚠️ No procedural generator for "${keyword}" - using primitive fallback`);
+            return spawnPrimitiveObject(keyword, position, props);
+    }
+
+    // Position the mesh
+    mesh.position.set(position.x, position.y, position.z);
+
+    // Apply rotation if specified
+    mesh.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
+
+    // Set metadata
+    mesh.userData = {
+        ...mesh.userData,
+        type: 'procedural',
+        keyword: keyword,
+        color: color, // Store color for persistence
+        spawnTime: Date.now(),
+        id: `procedural_${placedObjects.length}`,
+        source: 'procedural_generation',
+        props: props
+    };
+
+    // Enable shadows
+    mesh.traverse((child) => {
+        if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
+
+    console.log(`✅ Procedural "${keyword}" created`);
+    return mesh;
+}
+
+/**
+ * Ultimate fallback - spawn primitive geometric shapes
+ * @param {string} keyword - Object type keyword
+ * @param {Object} position - {x, y, z} position
+ * @param {Object} props - Additional properties
+ * @returns {THREE.Mesh} Primitive mesh
+ */
+function spawnPrimitiveObject(keyword, position, props = {}) {
+    console.log(`🔷 Primitive fallback: "${keyword}"`);
+
+    const {
+        color = 0xff6347,    // Tomato red (to indicate fallback)
+        scale = 1.0,
+        rotation = { x: 0, y: 0, z: 0 }
+    } = props;
+
+    let geometry;
+    const keywordLower = keyword.toLowerCase();
+    const finalScale = typeof scale === 'number' ? scale : 1;
+
+    // Intelligent primitive shape selection based on keyword
+    if (keywordLower.includes('ball') || keywordLower.includes('sphere')) {
+        geometry = new THREE.SphereGeometry(0.5 * finalScale, 32, 32);
+    } else if (keywordLower.includes('cylinder') || keywordLower.includes('tube')) {
+        geometry = new THREE.CylinderGeometry(0.5 * finalScale, 0.5 * finalScale, 1 * finalScale, 32);
+    } else if (keywordLower.includes('cone') || keywordLower.includes('pyramid')) {
+        geometry = new THREE.ConeGeometry(0.5 * finalScale, 1 * finalScale, 32);
+    } else {
+        // Default to cube
+        geometry = new THREE.BoxGeometry(1 * finalScale, 1 * finalScale, 1 * finalScale);
+    }
+
+    const material = new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.7,
+        metalness: 0.3
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+
+    // Position the mesh
+    mesh.position.set(position.x, position.y, position.z);
+
+    // Apply rotation
+    mesh.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
+
+    // Enable shadows
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    // Set metadata
+    mesh.userData = {
+        type: 'primitive',
+        keyword: keyword,
+        color: color, // Store color for persistence
+        spawnTime: Date.now(),
+        id: `primitive_${placedObjects.length}`,
+        source: 'primitive_fallback',
+        props: props
+    };
+
+    console.warn(`⚠️ Using primitive shape for "${keyword}"`);
+    return mesh;
+}
+
+/**
+ * Master spawn function with 3-tier hybrid approach:
+ * 1. Local models → 2. Poly.pizza → 3. Procedural → 4. Primitive
+ * 
+ * @param {string} keyword - Object type keyword
+ * @param {Object} propsOrPosition - Either props object (legacy) or position {x, y, z}
+ * @param {Object} props - Additional properties (color, scale, rotation, etc.)
+ * @returns {Promise<THREE.Object3D>} Spawned object
+ */
+export const spawnObject = async (keyword, propsOrPosition = {}, props = {}) => {
+    // Handle legacy call: spawnObject(type, props) where props might contain position
+    let position = { x: 0, y: 0, z: 0 };
+    let finalProps = {};
+
+    if (propsOrPosition.x !== undefined || propsOrPosition.y !== undefined || propsOrPosition.z !== undefined) {
+        // New signature: spawnObject(keyword, position, props)
+        position = propsOrPosition;
+        finalProps = props;
+    } else {
+        // Legacy/Direct props call: spawnObject(keyword, props)
+        finalProps = propsOrPosition;
+        position = finalProps.position || {
+            x: Math.random() * 4 - 2,
+            y: 2 + Math.random() * 2,
+            z: Math.random() * 4 - 2
+        };
+    }
+
+    const {
+        color, // No default here, so procedural can use its default
+        scale = 1.0,
+        rotation = { x: 0, y: 0, z: 0 },
+        autoScale = true,
+        targetSize = 2.0,
+        enablePhysics = true
+    } = finalProps;
+
+    // Normalize keyword (strip "beautiful", "a", etc.)
+    const normalizedKeyword = normalizeKeyword(keyword);
+    console.log(`🎯 Spawning: "${keyword}" (normalized: "${normalizedKeyword}") at (${position.x}, ${position.y}, ${position.z})`);
+
+    let spawnedObject = null;
+    let sourceType = 'unknown';
 
     try {
-        // Try to load GLB model first
-        model = await loadModel(finalType);
-        console.log(`Loaded GLB model: ${finalType}`);
-    } catch (error) {
-        console.log(`GLB model not found for ${finalType}, using procedural geometry:`, error.message);
+        // ============================================
+        // TIER 1 & 2: Try loadModel (Local + Poly.pizza)
+        // ============================================
+        updateStatus(`🔍 Loading "${normalizedKeyword}"...`);
 
-        // Fallback to procedural geometry
-        if (finalType === 'table') {
-            model = createTable(1.5, 0.8, 0.8);
-        } else if (finalType === 'chair') {
-            model = createChair(0.7);
-        } else if (finalType === 'sofa') {
-            model = createSofa(2, 1, 1);
-        } else if (finalType === 'armchair') {
-            model = createArmchair(1);
-        } else if (finalType === 'officechair') {
-            model = createOfficeChair(1);
-        } else if (finalType === 'bed') {
-            model = createBed(2, 0.6, 1.6);
-        } else if (finalType === 'lamp') {
-            model = createLamp(1.2);
-        } else if (finalType === 'plant') {
-            model = createPlant(1);
-        } else if (finalType === 'animal') {
-            model = createAnimal('animal');
-        } else if (finalType === 'car') {
-            model = createCar(1);
-        } else if (finalType === 'food') {
-            model = createFoodItem(finalType);
-        } else if (finalType === 'tool') {
-            model = createTool('tool');
-        } else if (finalType === 'electronics') {
-            model = createElectronics(finalType);
-        } else if (finalType === 'carpet') {
-            model = createCarpet(2, 1.5);
-        } else if (finalType === 'human') {
-            model = createHuman(1);
-        } else if (finalType === 'dragon') {
-            model = createDragon(1);
-        } else if (finalType === 'cube') {
-            model = new THREE.Group();
-            const mesh = new THREE.Mesh(
-                new THREE.BoxGeometry(1, 1, 1),
-                new THREE.MeshStandardMaterial({ color: 0xff4b2b })
-            );
-            mesh.position.y = 0.5;
-            model.add(mesh);
-            model.userData.type = 'cube';
-        } else {
-            // Generic cube for unknown objects
-            model = new THREE.Group();
-            const mesh = new THREE.Mesh(
-                new THREE.BoxGeometry(1, 1, 1),
-                new THREE.MeshStandardMaterial({ color: 0xff4b2b })
-            );
-            mesh.position.y = 0.5;
-            model.add(mesh);
-            model.userData.type = finalType || 'object';
-        }
-    }
-
-    // Apply properties if provided (from voice or cloud load)
-    if (props) {
-        // Apply color
-        if (props.color) {
-            const colorValue = new THREE.Color(props.color);
-            model.traverse(child => {
-                if (child.isMesh && child.material) {
-                    child.material.color.set(colorValue);
-                }
-            });
+        // Final normalization for local library names
+        let modelType = normalizedKeyword;
+        if (modelType.includes('chair')) {
+            if (modelType.includes('office')) modelType = 'officechair';
+            else if (modelType.includes('arm')) modelType = 'armchair';
+            else modelType = 'chair';
         }
 
-        // Apply size/scale
-        if (props.size) {
-            let scale = 1;
-            if (props.size === 'small') scale = 0.5;
-            else if (props.size === 'large') scale = 1.5;
-            model.scale.set(scale, scale, scale);
-        } else if (props.scale) {
-            model.scale.set(props.scale.x || 1, props.scale.y || 1, props.scale.z || 1);
-        }
-
-        // Apply rotation
-        if (props.rotation) {
-            model.rotation.set(props.rotation.x || 0, props.rotation.y || 0, props.rotation.z || 0);
-        }
-
-        // Apply position
-        if (props.position) {
-            model.position.set(props.position.x || 0, props.position.y || 0, props.position.z || 0);
-        } else {
-            // Random position only if no position provided
-            model.position.set(Math.random() * 4 - 2, 2 + Math.random() * 2, Math.random() * 4 - 2);
-        }
-
-        // Apply material
-        if (props.material) {
-            const presets = {
-                wood: { color: 0x8d6e63, metalness: 0.05, roughness: 0.7 },
-                metal: { color: 0xb0bec5, metalness: 0.90, roughness: 0.2 },
-                plastic: { color: 0xcfd8dc, metalness: 0.00, roughness: 0.4 },
-                glass: { color: 0x88ccee, metalness: 0.1, roughness: 0.1, opacity: 0.5, transparent: true },
-            };
-            const preset = presets[props.material.toLowerCase()];
-            if (preset) {
-                model.traverse(child => {
-                    if (child.isMesh && child.material) {
-                        child.material.color.set(preset.color);
-                        if (preset.metalness !== undefined) child.material.metalness = preset.metalness;
-                        if (preset.roughness !== undefined) child.material.roughness = preset.roughness;
-                        if (preset.opacity !== undefined) {
-                            child.material.opacity = preset.opacity;
-                            child.material.transparent = preset.transparent;
-                        }
-                    }
-                });
+        const model = await loadModel(modelType, {
+            tryPolyPizza: true,
+            scale: scale,
+            onProgress: (percent) => {
+                console.log(`Progress for "${normalizedKeyword}": ${percent}%`);
             }
+        });
+
+        // Model loaded successfully from local or Poly.pizza
+        console.log(`✅ Model loaded from: ${model.userData.source}`);
+        sourceType = model.userData.source;
+
+        // ============================================
+        // Prepare the model (auto-scale, center)
+        // ============================================
+        const preparedModel = prepareModel(model, {
+            autoScale: autoScale,
+            targetSize: targetSize,
+            centerModel: true,
+            enableShadows: true
+        });
+
+        spawnedObject = preparedModel;
+
+        // Success message with source
+        const sourceName = model.userData.source === 'poly_pizza'
+            ? `Poly.pizza: ${model.userData.polyPizza?.modelName || normalizedKeyword}`
+            : 'Local Library';
+
+        updateStatus(`✅ "${normalizedKeyword}" loaded (${sourceName})`);
+
+    } catch (error) {
+        console.log(`⚠️ Model load failed for "${normalizedKeyword}": ${error.message}`);
+
+        // ============================================
+        // TIER 3: Procedural Generation
+        // ============================================
+        if (error.message === 'PROCEDURAL_GENERATION_REQUIRED') {
+            console.log(`📐 Attempting procedural generation for "${normalizedKeyword}"`);
+
+            try {
+                spawnedObject = spawnProceduralObject(normalizedKeyword, position, {
+                    color: color,
+                    scale: scale,
+                    rotation: rotation
+                });
+                sourceType = 'procedural';
+                updateStatus(`✅ "${normalizedKeyword}" created (Procedural)`);
+
+            } catch (procError) {
+                console.warn(`⚠️ Procedural generation unavailable for "${normalizedKeyword}"`);
+
+                // ============================================
+                // TIER 4: Primitive Fallback
+                // ============================================
+                spawnedObject = spawnPrimitiveObject(normalizedKeyword, position, {
+                    color: color,
+                    scale: scale,
+                    rotation: rotation
+                });
+                sourceType = 'primitive';
+                updateStatus(`⚠️ "${normalizedKeyword}" using fallback shape`);
+            }
+        } else {
+            // Unexpected error - go straight to primitive
+            console.error(`❌ Unexpected error: ${error.message}`);
+            spawnedObject = spawnPrimitiveObject(normalizedKeyword, position, {
+                color: color,
+                scale: scale,
+                rotation: rotation
+            });
+            sourceType = 'primitive';
+            updateStatus(`❌ Error - using fallback for "${normalizedKeyword}"`);
         }
     }
 
-    // Ensure model has proper userData
-    if (!model.userData.type) {
-        model.userData.type = normalizedType || type;
+    // ============================================
+    // FINAL POSITIONING & SCENE INTEGRATION
+    // ============================================
+
+    if (!spawnedObject) {
+        console.error(`❌ Failed to spawn "${normalizedKeyword}"`);
+        return null;
     }
 
-    // Store base dimensions for step-based scaling
-    const bbox = new THREE.Box3().setFromObject(model);
-    const size = new THREE.Vector3();
-    bbox.getSize(size);
-    model.userData.baseHeight = props.baseHeight || size.y;
-    model.userData.baseWidth = props.baseWidth || size.x;
-    model.userData.baseDepth = props.baseDepth || size.z;
+    // Apply position
+    spawnedObject.position.set(position.x, position.y, position.z);
 
-    // Snapshot position/rotation so physics drift doesn't overwrite the save
-    if (props.position) {
-        model.userData.savedPosition = { ...props.position };
-    }
-    if (props.rotation) {
-        model.userData.savedRotation = { ...props.rotation };
+    // Apply rotation if not already set
+    if (spawnedObject.rotation.x === 0 && spawnedObject.rotation.y === 0) {
+        spawnedObject.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
     }
 
-    // Restore persisted color
-    if (props.color) {
-        model.userData.color = props.color;
-    }
+    // Store comprehensive metadata
+    spawnedObject.userData = {
+        ...spawnedObject.userData,
+        keyword: normalizedKeyword,
+        originalKeyword: keyword,
+        sourceType: sourceType,
+        color: color, // Ensure color is saved
+        spawnPosition: { ...position },
+        spawnRotation: { ...rotation },
+        originalProps: { ...finalProps }
+    };
 
-    // Restore persisted material
-    if (props.material) {
-        model.userData.material = props.material;
+    // ============================================
+    // APPLY COLOR TO MESHES
+    // ============================================
+    if (color !== undefined && color !== 0xffffff) {
+        spawnedObject.traverse((child) => {
+            if (child.isMesh) {
+                // If it's a single material
+                if (child.material.color && typeof color === 'number') {
+                    child.material.color.setHex(color);
+                } else if (child.material.color && typeof color === 'string') {
+                    child.material.color.set(color);
+                }
+            }
+        });
     }
 
     // Add to scene & physics
-    scene.add(model);
-    addPhysicsBodyForModel(model);
-    placedObjects.push(model);
-    updateStatus(`Spawned ${model.userData.type}`);
+    scene.add(spawnedObject);
+    addPhysicsBodyForModel(spawnedObject);
+    placedObjects.push(spawnedObject);
 
-    // Trigger auto-save
+    console.log(`✅ Successfully spawned "${normalizedKeyword}" (${sourceType})`);
     triggerAutoSave();
 
-    return model;
+    return spawnedObject;
 };
 
 function deleteObjectByType(type) {
     if (!type) return false;
 
-    const normalized = type.toLowerCase().trim().split(" ")[0];
+    const normalized = normalizeKeyword(type);
 
     // Find LAST placed matching object
     for (let i = placedObjects.length - 1; i >= 0; i--) {
-        if (placedObjects[i].userData.type === normalized) {
+        const ud = placedObjects[i].userData;
+        if (ud.keyword === normalized || ud.type === normalized || ud.originalKeyword === normalized) {
             const model = placedObjects[i];
             if (model.userData.body) {
                 world.removeBody(model.userData.body);
@@ -1153,7 +1363,7 @@ const processTextCommand = async (command) => {
             // Execute Gemini commands (multi-command support)
             if (parsed.commands && Array.isArray(parsed.commands) && parsed.commands.length > 0) {
                 for (const cmd of parsed.commands) {
-                    if (cmd.action === 'insert' && cmd.object) {
+                    if ((cmd.action === 'insert' || cmd.action === 'place') && cmd.object) {
                         await spawnObject(cmd.object, cmd);
                         updateStatus(`Spawned ${cmd.object}`);
                     } else if (cmd.action === 'delete' && cmd.object) {
@@ -1302,8 +1512,13 @@ const saveProject = async () => {
         // Use the user-placed snapshot position to avoid physics drift corrupting the save
         const pos = obj.userData.savedPosition || { x: obj.position.x, y: obj.position.y, z: obj.position.z };
         const rot = obj.userData.savedRotation || { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
+
+        // CRITICAL: Use userData.keyword which is the model name (table, sofa, armchair)
+        // rather than userData.type which might be "procedural" or "primitive"
+        const finalType = obj.userData.keyword || obj.userData.type || 'unknown';
+
         return {
-            type: obj.userData.type,
+            type: finalType,
             position: pos,
             scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
             rotation: rot,

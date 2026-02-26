@@ -47,26 +47,27 @@ Return ONLY a JSON object with this exact structure:
   "commands": [
     {
       "action": "place" | "delete" | "clear",
-      "object": "armchair" | "officechair" | "chair" | "table" | "sofa" | "lamp" | "plant" | "cube" | "sphere" | "cylinder" | "cone" | "pyramid" | "bed" | "tree" | "car" | "dragon" | "drawer" | "carpet" | "mattress" | "computer" | "tv" | "food" | "tool" | "electronics" | "human" | "animal",
+      "object": "base_object_name", // CRITICAL: Extract ONLY the base name (e.g., "sofa" not "beautiful sofa")
       "color": "color_name" | null,
       "size": "small" | "medium" | "large" | null,
       "material": "wood" | "metal" | "plastic" | "glass" | "stone" | null,
       "quantity": number,
-      "position": "current" | "left" | "right" | "forward" | "back"
+      "position": "current" | "left" | "right" | "forward" | "back",
+      "description": "any other adjectives" // e.g., "beautiful", "cute", "vintage"
     }
   ]
 }
 
 Example 1: "Create a beautiful red wooden chair and a small blue table"
-Output: { "commands": [ { "action": "place", "object": "armchair", "color": "red", "material": "wood", "quantity": 1, "position": "current" }, { "action": "place", "object": "table", "color": "blue", "size": "small", "quantity": 1, "position": "current" } ] }
+Output: { "commands": [ { "action": "place", "object": "armchair", "color": "red", "material": "wood", "quantity": 1, "description": "beautiful" }, { "action": "place", "object": "table", "color": "blue", "size": "small", "quantity": 1 } ] }
 
-Example 2: "Can you put a huge metallic dragon in the scene"
-Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large", "material": "metal", "quantity": 1, "position": "current" } ] }
+Example 2: "Spawn a cute tiny puppy"
+Output: { "commands": [ { "action": "place", "object": "animal", "size": "small", "quantity": 1, "description": "cute puppy" } ] }
 `;
 
     try {
       console.log('Sending request to Gemini 2.5 Flash...');
-      
+
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,7 +93,8 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
                       size: { type: "STRING", enum: ["small", "medium", "large"] },
                       material: { type: "STRING", enum: ["wood", "metal", "plastic", "glass", "stone"] },
                       quantity: { type: "NUMBER" },
-                      position: { type: "STRING", enum: ["current", "left", "right", "forward", "back"] }
+                      position: { type: "STRING", enum: ["current", "left", "right", "forward", "back"] },
+                      description: { type: "STRING" }
                     },
                     required: ["action", "object"]
                   }
@@ -107,37 +109,37 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
       if (!response.ok) {
         const errorData = await response.json();
         console.error('Gemini API Error details:', errorData);
-        
+
         // Diagnostic: If 404, suggest checking available models
         if (response.status === 404) {
           console.warn('Model not found. Try visiting this URL in your browser to see available models:');
           console.warn(`https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`);
         }
-        
+
         throw new Error(`HTTP ${response.status}: ${errorData.error?.message || response.statusText}`);
       }
 
       const data = await response.json();
       console.log('Gemini raw response:', data);
-      
+
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
+
       if (!text) {
         throw new Error('No text in Gemini response');
       }
-      
+
       console.log('Extracted text:', text);
-      
+
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         console.log('Successfully parsed Gemini response:', parsed);
         return parsed;
       }
-      
+
       console.log('No JSON found, trying fallback extraction...');
       return this.fallbackParse(text);
-      
+
     } catch (error) {
       console.error('Gemini API error:', error);
       return { error: `Failed to understand command: ${error.message}` };
@@ -147,7 +149,7 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
   fallbackParse(text) {
     const lowerText = text.toLowerCase();
     const words = lowerText.split(' ');
-    
+
     const result = {
       action: 'place',
       object: 'unknown',
@@ -155,7 +157,7 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
       size: null,
       material: null
     };
-    
+
     if (words.includes('create') || words.includes('add') || words.includes('place') || words.includes('spawn') || words.includes('put')) {
       result.action = 'place';
     } else if (words.includes('delete') || words.includes('remove')) {
@@ -163,29 +165,38 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
     } else if (words.includes('clear')) {
       result.action = 'clear';
     }
-    
-    const objectWords = ['chair', 'table', 'sofa', 'bed', 'lamp', 'plant', 'armchair', 'officechair'];
+
+    const objectWords = ['chair', 'table', 'sofa', 'bed', 'lamp', 'plant', 'armchair', 'officechair', 'car', 'dragon', 'human', 'animal', 'tv', 'computer', 'bench', 'desk'];
     for (const obj of objectWords) {
       if (lowerText.includes(obj)) {
         result.object = obj;
+
+        // Clean up from common adjectives if they managed to sneak in
+        const adjectives = ['beautiful', 'pretty', 'cute', 'elegant', 'modern', 'vintage', 'old', 'new', 'fancy', 'simple', 'big', 'small', 'tiny', 'large', 'huge'];
+        adjectives.forEach(adj => {
+          if (result.object.includes(adj)) {
+            result.object = result.object.replace(adj, '').trim();
+          }
+        });
+
         break;
       }
     }
-    
+
     const colors = { 'red': 'red', 'blue': 'blue', 'green': 'green', 'yellow': 'yellow', 'black': 'black', 'white': 'white' };
     for (const [colorName, colorValue] of Object.entries(colors)) {
       if (lowerText.includes(colorName)) {
         result.color = colorValue;
       }
     }
-    
+
     const materials = { 'wood': 'wood', 'metal': 'metal', 'plastic': 'plastic' };
     for (const [matName, matValue] of Object.entries(materials)) {
       if (lowerText.includes(matName) || lowerText.includes('wooden')) {
         result.material = matValue;
       }
     }
-    
+
     return { commands: [result] };
   }
 }
