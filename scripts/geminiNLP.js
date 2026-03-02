@@ -51,7 +51,7 @@ Return ONLY a JSON object with this exact structure:
 {
   "commands": [
     {
-      "action": "place" | "delete" | "clear",
+      "action": "place" | "delete" | "clear" | "modify",
       "object": "string (any standard object name or generic search term like 'guitar', 'car', 'lamp')",
       "color": "color_name" | null,
       "size": "small" | "medium" | "large" | null,
@@ -91,7 +91,7 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
                   items: {
                     type: "OBJECT",
                     properties: {
-                      action: { type: "STRING", enum: ["place", "delete", "clear"] },
+                      action: { type: "STRING", enum: ["place", "delete", "clear", "modify"] },
                       object: { type: "STRING" },
                       color: { type: "STRING" },
                       size: { type: "STRING", enum: ["small", "medium", "large"] },
@@ -167,6 +167,8 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
       result.action = 'delete';
     } else if (words.includes('clear')) {
       result.action = 'clear';
+    } else if (words.includes('modify') || words.includes('change') || words.includes('make') || words.includes('set')) {
+      result.action = 'modify';
     }
 
     const objectWords = ['chair', 'table', 'sofa', 'bed', 'lamp', 'plant', 'armchair', 'officechair', 'computer', 'tv', 'drawer', 'carpet', 'mattress'];

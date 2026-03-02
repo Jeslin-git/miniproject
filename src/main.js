@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createTable, createChair, createSofa, createArmchair, createOfficeChair, createBed, createLamp, createPlant, createCar, createFoodItem, createTool, createElectronics, createHuman, createDragon, createAnimal, createCarpet } from './utils/generators.js';
 import { world, CANNON } from './components/physics.js';
 import { loadModel, preloadModels } from './utils/modelLoader.js';
-import { split, parseClause } from './utils/voice.js';
+import { split, parseClause, parseEnhanced } from './utils/voice.js';
 import { VoiceManager } from './utils/voiceManager.js';
 import { GeminiNLP } from '../scripts/geminiNLP.js';
 import { supabase } from './lib/supabase.js';
@@ -493,8 +493,9 @@ const spawnObject = async (type, props = {}) => {
         // Apply size/scale
         if (props.size) {
             let scale = 1;
-            if (props.size === 'small') scale = 0.5;
-            else if (props.size === 'large') scale = 1.5;
+            const s = props.size.toLowerCase();
+            if (s === 'small' || s === 'tiny') scale = 0.5;
+            else if (s === 'large' || s === 'big' || s === 'huge') scale = 1.5;
             model.scale.set(scale, scale, scale);
         } else if (props.scale) {
             model.scale.set(props.scale.x || 1, props.scale.y || 1, props.scale.z || 1);
@@ -1059,6 +1060,69 @@ document.getElementById('delete-obj-btn').onclick = () => {
     }
 };
 
+// --- 5b. MODIFY OBJECT DEFINITION ---
+window.modifyCurrentObject = (cmd) => {
+    const targetObj = selectedObject || (placedObjects.length > 0 ? placedObjects[placedObjects.length - 1] : null);
+    if (!targetObj) return false;
+
+    if (cmd.color) {
+        const colorValue = new THREE.Color(cmd.color);
+        targetObj.userData.color = cmd.color;
+        targetObj.traverse((c) => {
+            if (c.isMesh) {
+                const mats = Array.isArray(c.material) ? c.material : [c.material];
+                mats.forEach(m => {
+                    if (m && m.color && typeof m.color.set === 'function') {
+                        m.color.set(colorValue);
+                        m.needsUpdate = true;
+                    }
+                });
+            }
+        });
+    }
+
+    if (cmd.size) {
+        let scale = 1;
+        const s = cmd.size.toLowerCase();
+        if (s === 'small' || s === 'tiny') scale = 0.5;
+        else if (s === 'large' || s === 'big' || s === 'huge') scale = 1.5;
+
+        targetObj.scale.set(scale, scale, scale);
+    }
+
+    if (cmd.material) {
+        const presets = {
+            wood: { color: 0x8d6e63, metalness: 0.05, roughness: 0.7 },
+            metal: { color: 0xb0bec5, metalness: 0.90, roughness: 0.2 },
+            plastic: { color: 0xcfd8dc, metalness: 0.00, roughness: 0.4 },
+            glass: { color: 0x88ccee, metalness: 0.1, roughness: 0.1, opacity: 0.5, transparent: true },
+        };
+        const preset = presets[cmd.material.toLowerCase()];
+        if (preset) {
+            targetObj.userData.material = cmd.material;
+            targetObj.traverse(child => {
+                if (child.isMesh && child.material) {
+                    child.material.color.set(preset.color);
+                    if (preset.metalness !== undefined) child.material.metalness = preset.metalness;
+                    if (preset.roughness !== undefined) child.material.roughness = preset.roughness;
+                    if (preset.opacity !== undefined) {
+                        child.material.opacity = preset.opacity;
+                        child.material.transparent = preset.transparent;
+                    }
+                }
+            });
+        }
+    }
+
+    // Update Property panel if object is selected
+    if (selectedObject === targetObj) {
+        updateLampUI(); updateMaterialUI(); updateCarpetUI();
+    }
+
+    triggerAutoSave();
+    return true;
+};
+
 // --- 6. VOICE SYSTEM ---
 // Load Gemini API key from server (.env) and initialize VoiceManager
 let geminiAPI = null;
@@ -1109,7 +1173,8 @@ const initVoiceSystem = async () => {
             triggerAutoSave();
         },
         updateStatus: updateStatus,
-        geminiAPI: geminiAPI
+        geminiAPI: geminiAPI,
+        modifyObject: window.modifyCurrentObject
     });
     window.voiceManager = voiceManager;
 
@@ -1169,9 +1234,12 @@ const processTextCommand = async (command) => {
             // Execute Gemini commands (multi-command support)
             if (parsed.commands && Array.isArray(parsed.commands) && parsed.commands.length > 0) {
                 for (const cmd of parsed.commands) {
-                    if (cmd.action === 'insert' && cmd.object) {
+                    if ((cmd.action === 'insert' || cmd.action === 'place') && cmd.object) {
                         await spawnObject(cmd.object, cmd);
                         updateStatus(`Spawned ${cmd.object}`);
+                    } else if (cmd.action === 'modify') {
+                        const success = window.modifyCurrentObject(cmd);
+                        updateStatus(success ? "Modified properties" : "No object found to modify");
                     } else if (cmd.action === 'delete' && cmd.object) {
                         const success = deleteObjectByType(cmd.object);
                         updateStatus(success ? `Deleted ${cmd.object}` : `No ${cmd.object} found`);
@@ -1202,11 +1270,14 @@ const processTextCommand = async (command) => {
     }
 
     // Fallback to local regex-based parsing
-    const clauses = split(command);
-    const results = [];
-    clauses.forEach(clause => {
-        const parsed = parseClause(clause);
-        if (parsed) results.push(parsed);
+    const results = parseEnhanced(command).map(cmd => {
+        cmd.color = cmd.colors ? cmd.colors[0] : null;
+        if (cmd.sizes && cmd.sizes.length > 0) {
+            const s = cmd.sizes[0];
+            if (s === 'small' || s === 'tiny') cmd.size = 'small';
+            if (s === 'big' || s === 'large' || s === 'huge') cmd.size = 'large';
+        }
+        return cmd;
     });
 
     if (results.length === 0) {
@@ -1215,9 +1286,12 @@ const processTextCommand = async (command) => {
     }
 
     for (const cmd of results) {
-        if (cmd.action === 'insert' && cmd.object) {
-            await spawnObject(cmd.object);
+        if ((cmd.action === 'insert' || cmd.action === 'place') && cmd.object) {
+            await spawnObject(cmd.object, cmd);
             updateStatus(`Spawned ${cmd.object}`);
+        } else if (cmd.action === 'modify') {
+            const success = window.modifyCurrentObject(cmd);
+            updateStatus(success ? "Modified properties" : "No object found to modify");
         } else if (cmd.action === 'delete' && cmd.object) {
             const success = deleteObjectByType(cmd.object);
             updateStatus(success ? `Deleted ${cmd.object}` : `No ${cmd.object} found`);

@@ -1,14 +1,15 @@
 // src/utils/voiceManager.js
 // Voice recognition and command processing manager
 
-import { split, parseClause } from './voice.js';
+import { split, parseClause, parseEnhanced } from './voice.js';
 
 export class VoiceManager {
     constructor(options = {}) {
-        this.spawnObject = options.spawnObject || (() => {});
+        this.spawnObject = options.spawnObject || (() => { });
         this.deleteObjectByType = options.deleteObjectByType || (() => false);
-        this.clearScene = options.clearScene || (() => {});
-        this.updateStatus = options.updateStatus || (() => {});
+        this.clearScene = options.clearScene || (() => { });
+        this.updateStatus = options.updateStatus || (() => { });
+        this.modifyObject = options.modifyObject || (() => false);
         this.geminiAPI = options.geminiAPI || null;
 
         this.voicePopup = document.getElementById('voice-popup');
@@ -74,25 +75,25 @@ export class VoiceManager {
 
     async processTranscript(transcript) {
         console.log('Processing transcript:', transcript);
-        
+
         // Use Gemini API if available, otherwise fallback to simple parsing
         if (this.geminiAPI) {
             try {
                 this.showPopup('Understanding with AI...');
                 const parsed = await this.geminiAPI.parseCommand(transcript);
                 console.log('Gemini understood:', parsed);
-                
+
                 if (parsed.error) {
                     this.showMessage(`Error: ${parsed.error}`);
                     return;
                 }
-                
+
                 // Use Gemini results if they exist and are valid
                 if (parsed.commands && Array.isArray(parsed.commands) && parsed.commands.length > 0) {
                     await this.executeCommands(parsed.commands);
                     return;
                 }
-                
+
                 // Fallback for single command format
                 if (parsed.action && parsed.object) {
                     await this.executeCommands([parsed]);
@@ -103,14 +104,16 @@ export class VoiceManager {
                 this.showMessage('AI processing failed, using fallback');
             }
         }
-        
-        // Only use simple fallback if Gemini is not available
-        const clauses = split(transcript);
-        const results = [];
 
-        clauses.forEach(clause => {
-            const parsed = parseClause(clause);
-            if (parsed) results.push(parsed);
+        // Only use simple fallback if Gemini is not available
+        const results = parseEnhanced(transcript).map(cmd => {
+            cmd.color = cmd.colors ? cmd.colors[0] : null;
+            if (cmd.sizes && cmd.sizes.length > 0) {
+                const s = cmd.sizes[0];
+                if (s === 'small' || s === 'tiny') cmd.size = 'small';
+                if (s === 'big' || s === 'large' || s === 'huge') cmd.size = 'large';
+            }
+            return cmd;
         });
 
         console.log('Parsed commands (fallback only):', results);
@@ -125,7 +128,7 @@ export class VoiceManager {
                 if (cmd.object) {
                     // Enhanced spawning with properties
                     await this.spawnObject(cmd.object, cmd);
-                    
+
                     // Apply additional properties if specified
                     if (cmd.color || cmd.size || cmd.material) {
                         this.showMessage(`Placed ${cmd.color || ''} ${cmd.size || ''} ${cmd.material || ''} ${cmd.object.toUpperCase()}`);
@@ -146,6 +149,14 @@ export class VoiceManager {
                 this.clearScene();
                 this.updateStatus("Scene Cleared");
                 this.showMessage('Cleared all objects');
+                processed = true;
+            } else if (cmd.action === 'modify') {
+                const success = this.modifyObject(cmd);
+                if (success) {
+                    this.showMessage('Modified object properties');
+                } else {
+                    this.showMessage('No object found to modify');
+                }
                 processed = true;
             }
         }

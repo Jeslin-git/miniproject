@@ -5,9 +5,10 @@
  * Action keywords for voice commands
  */
 const ACTIONS = {
-  insert: ["insert", "add", "bring", "include", "place", "spawn", "create"],
-  delete: ["delete", "remove", "erase"],
-  clear: ["clear", "reset"]
+    insert: ["insert", "add", "bring", "include", "place", "spawn", "create"],
+    delete: ["delete", "remove", "erase"],
+    clear: ["clear", "reset"],
+    modify: ["modify", "change", "update", "make", "set", "turn"]
 };
 
 /**
@@ -29,12 +30,12 @@ const STOP_WORDS = ["a", "an", "the", "my", "some"];
  */
 function split(transcript) {
     let clauses = transcript.toLowerCase();
-    
+
     // Replace connectors with a separator
     CONNECTORS.forEach(connector => {
         clauses = clauses.replaceAll(` ${connector} `, " | ");
     });
-    
+
     return clauses.split(" | ").filter(clause => clause.trim().length > 0);
 }
 
@@ -47,29 +48,29 @@ function split(transcript) {
  */
 function parseClause(clause) {
     const words = clause.trim().split(" ");
-    
+
     // Look for action keywords
     for (let action in ACTIONS) {
         for (let keyword of ACTIONS[action]) {
             const index = words.indexOf(keyword);
-            
+
             if (index !== -1) {
                 // Get words after the action keyword
                 let objectWords = words.slice(index + 1);
-                
+
                 // Filter out stop words and clean up
-                objectWords = objectWords.filter(word => 
+                objectWords = objectWords.filter(word =>
                     word.length > 0 && !STOP_WORDS.includes(word.toLowerCase())
                 );
-                
+
                 // Join remaining words to form object name
                 const objectName = objectWords.join(" ");
-                
+
                 return { action, object: objectName };
             }
         }
     }
-    
+
     return null;
 }
 
@@ -81,17 +82,17 @@ function parseClause(clause) {
 function parseEnhanced(transcript) {
     const clauses = split(transcript);
     const results = [];
-    
+
     const COLORS = ["red", "blue", "green", "yellow", "orange", "purple", "pink", "black", "white", "brown"];
     const SIZES = ["big", "large", "small", "tiny", "huge"];
-    
+
     clauses.forEach(clause => {
         const parsed = parseClause(clause);
         if (parsed) {
             // Check for colors and sizes in the object name
             const colors = COLORS.filter(c => clause.includes(c));
             const sizes = SIZES.filter(s => clause.includes(s));
-            
+
             results.push({
                 ...parsed,
                 colors: colors.length > 0 ? colors : null,
@@ -100,16 +101,16 @@ function parseEnhanced(transcript) {
             });
         }
     });
-    
+
     return results;
 }
 
 // Export only the functions, no DOM manipulation
-export { 
-    split, 
-    parseClause, 
+export {
+    split,
+    parseClause,
     parseEnhanced,
-    ACTIONS, 
-    CONNECTORS, 
-    STOP_WORDS 
+    ACTIONS,
+    CONNECTORS,
+    STOP_WORDS
 };
