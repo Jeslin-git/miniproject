@@ -7,6 +7,7 @@ export class VoiceManager {
     constructor(options = {}) {
         this.spawnObject = options.spawnObject || (() => { });
         this.deleteObjectByType = options.deleteObjectByType || (() => false);
+        this.deleteCurrentObject = options.deleteCurrentObject || (() => false);
         this.clearScene = options.clearScene || (() => { });
         this.updateStatus = options.updateStatus || (() => { });
         this.modifyObject = options.modifyObject || (() => false);
@@ -138,12 +139,17 @@ export class VoiceManager {
                     processed = true;
                 }
             } else if (cmd.action === 'delete') {
-                const success = this.deleteObjectByType(cmd.object);
+                let success = false;
+                if (!cmd.object || ['unknown', 'it', 'this', 'selected', 'that'].includes(cmd.object.toLowerCase())) {
+                    success = this.deleteCurrentObject();
+                } else {
+                    success = this.deleteObjectByType(cmd.object);
+                }
                 if (success) {
-                    this.showMessage(`Deleted ${cmd.object}`);
+                    this.showMessage(`Deleted object`);
                     processed = true;
                 } else {
-                    this.showMessage(`No ${cmd.object} found`);
+                    this.showMessage(`No object found to delete`);
                 }
             } else if (cmd.action === 'clear') {
                 this.clearScene();

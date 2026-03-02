@@ -507,7 +507,35 @@ const spawnObject = async (type, props = {}) => {
         }
 
         // Apply position
-        if (props.position) {
+        if (props.position === 'above') {
+            // Find reference object
+            let refObj = null;
+            if (props.referenceObject) {
+                const searchName = props.referenceObject.toLowerCase().trim();
+                // Find last placed object matching the name
+                for (let i = placedObjects.length - 1; i >= 0; i--) {
+                    if (placedObjects[i].userData.type.includes(searchName) || searchName.includes(placedObjects[i].userData.type)) {
+                        refObj = placedObjects[i];
+                        break;
+                    }
+                }
+            }
+            if (!refObj) {
+                refObj = selectedObject || (placedObjects.length > 0 ? placedObjects[placedObjects.length - 1] : null);
+            }
+
+            if (refObj) {
+                const refBbox = new THREE.Box3().setFromObject(refObj);
+                const modelBbox = new THREE.Box3().setFromObject(model);
+                const modelSize = new THREE.Vector3();
+                modelBbox.getSize(modelSize);
+
+                // Account for height center offsets depending on geometry bounding volume
+                model.position.set(refObj.position.x, refBbox.max.y + (modelSize.y / 2) + 0.05, refObj.position.z);
+            } else {
+                model.position.set(Math.random() * 4 - 2, 2 + Math.random() * 2, Math.random() * 4 - 2);
+            }
+        } else if (props.position && typeof props.position === 'object') {
             model.position.set(props.position.x || 0, props.position.y || 0, props.position.z || 0);
         } else {
             // Random position only if no position provided
@@ -630,6 +658,7 @@ if (document.readyState === 'loading') {
 }
 
 // --- 5. SELECTION & PROPERTIES ---
+let selectionHistory = [null, null];
 let clickTimeout = null;
 let lastClickTime = 0;
 const DOUBLE_CLICK_DELAY = 300;
@@ -671,6 +700,10 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
         }
 
         // Single-click: Select and enable dragging
+        if (root !== selectedObject) {
+            selectionHistory[0] = selectionHistory[1];
+            selectionHistory[1] = root;
+        }
         selectedObject = root;
         isDragging = true;
         disablePhysics(selectedObject);
@@ -752,14 +785,45 @@ renderer.domElement.addEventListener('pointerup', () => {
     triggerAutoSave();
 });
 
-//keyboard rotation
+//keyboard rotation and movement
 window.addEventListener('keydown', (e) => {
     if (!selectedObject) return;
 
+    // Prevent moving if user is typing in an input field (e.g. text commands)
+    if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'textarea') return;
+
     const rotStep = 0.15;
+    const moveStep = 0.2;
 
     if (e.key === 'q') rotateSelected(rotStep);
     if (e.key === 'e') rotateSelected(-rotStep);
+
+    let moved = false;
+
+    // Y axis movement with Shift + Up/Down
+    if (e.shiftKey) {
+        if (e.key === 'ArrowUp') { selectedObject.position.y += moveStep; moved = true; e.preventDefault(); }
+        if (e.key === 'ArrowDown') { selectedObject.position.y -= moveStep; moved = true; e.preventDefault(); }
+    } else {
+        // X and Z axis movement
+        if (e.key === 'ArrowUp') { selectedObject.position.z -= moveStep; moved = true; e.preventDefault(); }
+        if (e.key === 'ArrowDown') { selectedObject.position.z += moveStep; moved = true; e.preventDefault(); }
+        if (e.key === 'ArrowLeft') { selectedObject.position.x -= moveStep; moved = true; e.preventDefault(); }
+        if (e.key === 'ArrowRight') { selectedObject.position.x += moveStep; moved = true; e.preventDefault(); }
+    }
+
+    if (moved) {
+        if (selectedObject.userData.body) {
+            selectedObject.userData.body.position.copy(selectedObject.position);
+            selectedObject.userData.body.velocity.set(0, 0, 0);
+        }
+        selectedObject.userData.savedPosition = {
+            x: selectedObject.position.x,
+            y: selectedObject.position.y,
+            z: selectedObject.position.z
+        };
+        triggerAutoSave();
+    }
 });
 
 function rotateSelected(angle) {
@@ -1053,12 +1117,67 @@ document.getElementById('delete-obj-btn').onclick = () => {
         selectedObject = null;
         updateLampUI(); updateMaterialUI(); updateCarpetUI();
         document.getElementById('property-panel').classList.add('hidden');
-        updateStatus("Object Deleted");
-        updateLampUI(); updateMaterialUI(); updateCarpetUI();
         showCompass(); // Show compass when object is deleted
         triggerAutoSave();
     }
 };
+
+const restoreBtn = document.getElementById('restore-btn');
+if (restoreBtn) {
+    restoreBtn.onclick = () => {
+        if (!selectedObject) return;
+
+        // Reset rotation and tilt
+        selectedObject.rotation.set(0, 0, 0);
+
+        // Reset physics
+        if (selectedObject.userData.body) {
+            selectedObject.userData.body.position.copy(selectedObject.position);
+            selectedObject.userData.body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), 0);
+            selectedObject.userData.body.velocity.set(0, 0, 0);
+            selectedObject.userData.body.angularVelocity.set(0, 0, 0);
+        }
+
+        selectedObject.userData.savedRotation = { x: 0, y: 0, z: 0 };
+
+        triggerAutoSave();
+        updateStatus("Object restored");
+    };
+}
+
+const stackBtn = document.getElementById('stack-btn');
+if (stackBtn) {
+    stackBtn.onclick = () => {
+        const topObj = selectionHistory[1];
+        const bottomObj = selectionHistory[0];
+
+        if (!topObj || !bottomObj || topObj === bottomObj) {
+            updateStatus("Select two different objects to stack");
+            return;
+        }
+
+        const refBbox = new THREE.Box3().setFromObject(bottomObj);
+        const modelBbox = new THREE.Box3().setFromObject(topObj);
+        const modelSize = new THREE.Vector3();
+        modelBbox.getSize(modelSize);
+
+        topObj.position.set(bottomObj.position.x, refBbox.max.y + (modelSize.y / 2) + 0.05, bottomObj.position.z);
+
+        if (topObj.userData.body) {
+            topObj.userData.body.position.copy(topObj.position);
+            topObj.userData.body.velocity.set(0, 0, 0);
+        }
+
+        topObj.userData.savedPosition = {
+            x: topObj.position.x,
+            y: topObj.position.y,
+            z: topObj.position.z
+        };
+
+        triggerAutoSave();
+        updateStatus("Objects Stacked");
+    };
+}
 
 // --- 5b. MODIFY OBJECT DEFINITION ---
 window.modifyCurrentObject = (cmd) => {
@@ -1123,6 +1242,28 @@ window.modifyCurrentObject = (cmd) => {
     return true;
 };
 
+// --- 5c. DELETE OBJECT DEFINITION ---
+window.deleteCurrentObject = () => {
+    const targetObj = selectedObject || (placedObjects.length > 0 ? placedObjects[placedObjects.length - 1] : null);
+    if (!targetObj) return false;
+
+    if (targetObj.userData.body) {
+        world.removeBody(targetObj.userData.body);
+    }
+    scene.remove(targetObj);
+    placedObjects = placedObjects.filter(o => o !== targetObj);
+
+    if (selectedObject === targetObj) {
+        selectedObject = null;
+        updateLampUI(); updateMaterialUI(); updateCarpetUI();
+        document.getElementById('property-panel').classList.add('hidden');
+        showCompass();
+    }
+
+    triggerAutoSave();
+    return true;
+};
+
 // --- 6. VOICE SYSTEM ---
 // Load Gemini API key from server (.env) and initialize VoiceManager
 let geminiAPI = null;
@@ -1174,7 +1315,8 @@ const initVoiceSystem = async () => {
         },
         updateStatus: updateStatus,
         geminiAPI: geminiAPI,
-        modifyObject: window.modifyCurrentObject
+        modifyObject: window.modifyCurrentObject,
+        deleteCurrentObject: window.deleteCurrentObject
     });
     window.voiceManager = voiceManager;
 
@@ -1240,10 +1382,14 @@ const processTextCommand = async (command) => {
                     } else if (cmd.action === 'modify') {
                         const success = window.modifyCurrentObject(cmd);
                         updateStatus(success ? "Modified properties" : "No object found to modify");
-                    } else if (cmd.action === 'delete' && cmd.object) {
-                        const success = deleteObjectByType(cmd.object);
-                        updateStatus(success ? `Deleted ${cmd.object}` : `No ${cmd.object} found`);
-                        if (success) triggerAutoSave(); // Added triggerAutoSave
+                    } else if (cmd.action === 'delete') {
+                        let success = false;
+                        if (!cmd.object || ['unknown', 'it', 'this', 'selected', 'that'].includes(cmd.object.toLowerCase())) {
+                            success = window.deleteCurrentObject();
+                        } else {
+                            success = deleteObjectByType(cmd.object);
+                        }
+                        updateStatus(success ? `Deleted object` : `No object found to delete`);
                     } else if (cmd.action === 'clear') {
                         placedObjects.forEach(obj => {
                             if (obj.userData.body) world.removeBody(obj.userData.body);
@@ -1292,9 +1438,14 @@ const processTextCommand = async (command) => {
         } else if (cmd.action === 'modify') {
             const success = window.modifyCurrentObject(cmd);
             updateStatus(success ? "Modified properties" : "No object found to modify");
-        } else if (cmd.action === 'delete' && cmd.object) {
-            const success = deleteObjectByType(cmd.object);
-            updateStatus(success ? `Deleted ${cmd.object}` : `No ${cmd.object} found`);
+        } else if (cmd.action === 'delete') {
+            let success = false;
+            if (!cmd.object || ['unknown', 'it', 'this', 'selected', 'that'].includes(cmd.object.toLowerCase())) {
+                success = window.deleteCurrentObject();
+            } else {
+                success = deleteObjectByType(cmd.object);
+            }
+            updateStatus(success ? `Deleted object` : `No object found to delete`);
         } else if (cmd.action === 'clear') {
             placedObjects.forEach(obj => {
                 if (obj.userData.body) world.removeBody(obj.userData.body);

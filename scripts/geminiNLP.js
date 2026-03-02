@@ -57,8 +57,8 @@ Return ONLY a JSON object with this exact structure:
       "size": "small" | "medium" | "large" | null,
       "material": "wood" | "metal" | "plastic" | "glass" | "stone" | null,
       "quantity": number,
-      "position": "current" | "left" | "right" | "forward" | "back"
-    }
+      "position": "current" | "left" | "right" | "forward" | "back" | "above",
+      "referenceObject": "string (the object to place this above, if specified)" | null    }
   ]
 }
 
@@ -97,7 +97,8 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
                       size: { type: "STRING", enum: ["small", "medium", "large"] },
                       material: { type: "STRING", enum: ["wood", "metal", "plastic", "glass", "stone"] },
                       quantity: { type: "NUMBER" },
-                      position: { type: "STRING", enum: ["current", "left", "right", "forward", "back"] }
+                      position: { type: "STRING", enum: ["current", "left", "right", "forward", "back", "above"] },
+                      referenceObject: { type: "STRING" }
                     },
                     required: ["action", "object"]
                   }
@@ -158,7 +159,9 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
       object: 'unknown',
       color: null,
       size: null,
-      material: null
+      material: null,
+      position: null,
+      referenceObject: null
     };
 
     if (words.includes('create') || words.includes('add') || words.includes('place') || words.includes('spawn') || words.includes('put')) {
@@ -196,6 +199,13 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
       if (lowerText.includes(matName) || lowerText.includes('wooden')) {
         result.material = matValue;
       }
+    }
+
+    // Check for "above" or "on"
+    const aboveMatch = lowerText.match(/(?:above|on|on top of) (?:the |a |an )?([a-z ]+)/);
+    if (aboveMatch) {
+      result.position = 'above';
+      result.referenceObject = aboveMatch[1].trim();
     }
 
     return { commands: [result] };

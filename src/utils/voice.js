@@ -93,10 +93,28 @@ function parseEnhanced(transcript) {
             const colors = COLORS.filter(c => clause.includes(c));
             const sizes = SIZES.filter(s => clause.includes(s));
 
+            let position = null;
+            let referenceObject = null;
+            const aboveMatch = parsed.object.match(/(?:above|on|on top of) (?:the |a |an )?([a-z0-9 ]+)/i);
+            if (aboveMatch) {
+                position = "above";
+                referenceObject = aboveMatch[1].trim();
+                parsed.object = parsed.object.substring(0, aboveMatch.index).trim();
+            } else {
+                // Fallback scan on the whole clause if parsed.object stripped too much
+                const clauseMatch = clause.match(/(?:above|on|on top of) (?:the |a |an )?([a-z0-9 ]+)/i);
+                if (clauseMatch) {
+                    position = "above";
+                    referenceObject = clauseMatch[1].trim();
+                }
+            }
+
             results.push({
                 ...parsed,
                 colors: colors.length > 0 ? colors : null,
                 sizes: sizes.length > 0 ? sizes : null,
+                position,
+                referenceObject,
                 raw: clause
             });
         }
