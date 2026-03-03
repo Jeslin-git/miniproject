@@ -115,43 +115,43 @@ export function loadModel(modelName) {
         }
 
         try {
-            const response = await fetch(`https://api.poly.pizza/v1/search?keyword=${encodeURIComponent(modelName)}`, {
+            const response = await fetch(`/api/polypizza/v1/search/${encodeURIComponent(modelName)}`, {
                 method: 'GET',
                 headers: {
                     'X-Auth-Token': apiKey
                 }
             });
 
-            if (!response.ok) {
-                throw new Error(`PolyPizza API returned status: ${response.status}`);
-            }
+    if (!response.ok) {
+        throw new Error(`PolyPizza API returned status: ${response.status}`);
+    }
 
-            const data = await response.json();
+    const data = await response.json();
 
-            if (!data.results || data.results.length === 0) {
-                console.log(`No PolyPizza results found for ${modelName}. Rejecting to trigger procedural fallback (if applicable)`);
-                reject(new Error(`Model "${modelName}" not found on PolyPizza.`));
-                return;
-            }
+    if (!data.results || data.results.length === 0) {
+        console.log(`No PolyPizza results found for ${modelName}. Rejecting to trigger procedural fallback (if applicable)`);
+        reject(new Error(`Model "${modelName}" not found on PolyPizza.`));
+        return;
+    }
 
-            // Grab the first viable GLB model
-            const result = data.results[0];
-            const downloadUrl = result.Download;
+    // Grab the first viable GLB model
+    const result = data.results[0];
+    const downloadUrl = result.Download;
 
-            if (!downloadUrl) {
-                reject(new Error('PolyPizza result missing download URL'));
-                return;
-            }
+    if (!downloadUrl) {
+        reject(new Error('PolyPizza result missing download URL'));
+        return;
+    }
 
-            console.log(`Found "${modelName}" on PolyPizza. Downloading GLB from:`, downloadUrl);
+    console.log(`Found "${modelName}" on PolyPizza. Downloading GLB from:`, downloadUrl);
 
-            // For external models, default scale to 1 (users can adjust it) and use the search term as type
-            doGLBDownload(modelName, downloadUrl, 1, modelName, resolve, reject);
+    // For external models, default scale to 1 (users can adjust it) and use the search term as type
+    doGLBDownload(modelName, downloadUrl, 1, modelName, resolve, reject);
 
-        } catch (err) {
-            console.error('Error fetching from PolyPizza:', err);
-            reject(err);
-        }
+} catch (err) {
+    console.error('Error fetching from PolyPizza:', err);
+    reject(err);
+}
     });
 }
 
