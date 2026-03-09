@@ -8,7 +8,9 @@ const ACTIONS = {
     insert: ["insert", "add", "bring", "include", "place", "spawn", "create"],
     delete: ["delete", "remove", "erase"],
     clear: ["clear", "reset"],
-    modify: ["modify", "change", "update", "make", "set", "turn"]
+    modify: ["modify", "change", "update", "make", "set", "turn"],
+    scale: ["scale", "increase", "decrease", "bigger", "smaller", "shrink", "grow", "enlarge", "reduce", "minimize"],
+    move: ["move", "shift", "slide"]
 };
 
 /**
@@ -95,17 +97,46 @@ function parseEnhanced(transcript) {
 
             let position = null;
             let referenceObject = null;
-            const aboveMatch = parsed.object.match(/(?:above|on|on top of) (?:the |a |an )?([a-z0-9 ]+)/i);
-            if (aboveMatch) {
-                position = "above";
-                referenceObject = aboveMatch[1].trim();
-                parsed.object = parsed.object.substring(0, aboveMatch.index).trim();
+
+            const PREPOSITIONS = [
+                "on top of", "in front of", "next to", "left of", "right of",
+                "above", "on", "near", "beside", "behind", "below", "under", "to top of"
+            ];
+            const positionRegex = new RegExp(`(${PREPOSITIONS.join("|")}) (?:the |a |an )?([a-z0-9 ]+)`, "i");
+
+            const positionMatch = parsed.object.match(positionRegex);
+            if (positionMatch) {
+                let pos = positionMatch[1].toLowerCase();
+                if (pos === "to top of") pos = "above"; // normalize
+                position = pos; // e.g. "near", "above"
+                referenceObject = positionMatch[2].trim();
+                parsed.object = parsed.object.substring(0, positionMatch.index).trim();
             } else {
                 // Fallback scan on the whole clause if parsed.object stripped too much
-                const clauseMatch = clause.match(/(?:above|on|on top of) (?:the |a |an )?([a-z0-9 ]+)/i);
+                const clauseMatch = clause.match(positionRegex);
                 if (clauseMatch) {
-                    position = "above";
-                    referenceObject = clauseMatch[1].trim();
+                    let pos = clauseMatch[1].toLowerCase();
+                    if (pos === "to top of") pos = "above"; // normalize
+                    position = pos;
+                    referenceObject = clauseMatch[2].trim();
+                }
+            }
+
+            if (parsed.action === "scale") {
+                if (clause.includes("increase") || clause.includes("bigger") || clause.includes("grow") || clause.includes("enlarge")) {
+                    parsed.scaleAction = "increase";
+                } else if (clause.includes("decrease") || clause.includes("smaller") || clause.includes("shrink") || clause.includes("reduce") || clause.includes("minimize")) {
+                    parsed.scaleAction = "decrease";
+                }
+            }
+
+            if (parsed.action === "move") {
+                const moveDirs = ["left", "right", "up", "down", "forward", "back", "backward", "ahead"];
+                for (let dir of moveDirs) {
+                    if (clause.includes(dir) && !position) { // Only override if not already captured by prep
+                        position = dir === "backward" ? "back" : (dir === "ahead" ? "forward" : dir);
+                        break;
+                    }
                 }
             }
 

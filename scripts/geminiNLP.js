@@ -32,6 +32,8 @@ ADJECTIVE MAPPING:
 - "red", "blue", "green", "yellow", "purple", "orange", "black", "white", "brown", "pink", "cyan", "magenta" -> color: "[color]"
 - "tiny", "small", "little" -> size: "small"
 - "big", "large", "huge", "massive" -> size: "large"
+- "increase", "bigger", "grow", "enlarge" -> scaleAction: "increase"
+- "decrease", "smaller", "shrink", "reduce", "minimize" -> scaleAction: "decrease"
 
 COMMAND PARSING RULES:
 1. Identify multiple commands separated by "and", "then", "also", "plus", or punctuation.
@@ -50,15 +52,15 @@ User Input: "${voiceInput}"
 Return ONLY a JSON object with this exact structure:
 {
   "commands": [
-    {
-      "action": "place" | "delete" | "clear" | "modify",
-      "object": "string (any standard object name or generic search term like 'guitar', 'car', 'lamp')",
+      "action": "place" | "delete" | "clear" | "modify" | "scale" | "move",
+      "object": "string (any standard object name or generic search term like 'guitar', 'car', 'lamp', 'current' for selected)",
       "color": "color_name" | null,
       "size": "small" | "medium" | "large" | null,
+      "scaleAction": "increase" | "decrease" | null,
       "material": "wood" | "metal" | "plastic" | "glass" | "stone" | null,
       "quantity": number,
-      "position": "current" | "left" | "right" | "forward" | "back" | "above",
-      "referenceObject": "string (the object to place this above, if specified)" | null    }
+      "position": "current" | "left" | "right" | "forward" | "back" | "up" | "down" | "above" | "below" | "near" | "next to",
+      "referenceObject": "string (the object to move this relative to, if specified)" | null    }
   ]
 }
 
@@ -67,6 +69,12 @@ Output: { "commands": [ { "action": "place", "object": "armchair", "color": "red
 
 Example 2: "Can you put a huge metallic dragon in the scene"
 Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large", "material": "metal", "quantity": 1, "position": "current" } ] }
+
+Example 3: "Increase the size of the desk"
+Output: { "commands": [ { "action": "scale", "object": "table", "scaleAction": "increase", "quantity": 1 } ] }
+
+Example 4: "Move the bed right and then move the chair next to the table"
+Output: { "commands": [ { "action": "move", "object": "bed", "position": "right", "quantity": 1 }, { "action": "move", "object": "chair", "position": "near", "referenceObject": "table", "quantity": 1 } ] }
 `;
 
     try {
@@ -91,13 +99,14 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
                   items: {
                     type: "OBJECT",
                     properties: {
-                      action: { type: "STRING", enum: ["place", "delete", "clear", "modify"] },
+                      action: { type: "STRING", enum: ["place", "delete", "clear", "modify", "scale", "move"] },
                       object: { type: "STRING" },
                       color: { type: "STRING" },
                       size: { type: "STRING", enum: ["small", "medium", "large"] },
+                      scaleAction: { type: "STRING", enum: ["increase", "decrease"] },
                       material: { type: "STRING", enum: ["wood", "metal", "plastic", "glass", "stone"] },
                       quantity: { type: "NUMBER" },
-                      position: { type: "STRING", enum: ["current", "left", "right", "forward", "back", "above"] },
+                      position: { type: "STRING", enum: ["current", "left", "right", "forward", "back", "up", "down", "above", "below", "near", "next to", "on", "behind", "left of", "right of", "in front of"] },
                       referenceObject: { type: "STRING" }
                     },
                     required: ["action", "object"]
@@ -170,6 +179,20 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
       result.action = 'delete';
     } else if (words.includes('clear')) {
       result.action = 'clear';
+    } else if (words.includes('scale') || words.includes('increase') || words.includes('decrease') || words.includes('bigger') || words.includes('smaller') || words.includes('shrink') || words.includes('grow') || words.includes('reduce') || words.includes('minimize')) {
+      result.action = 'scale';
+      if (words.includes('increase') || words.includes('bigger') || words.includes('grow') || words.includes('enlarge')) result.scaleAction = 'increase';
+      if (words.includes('decrease') || words.includes('smaller') || words.includes('shrink') || words.includes('reduce') || words.includes('minimize')) result.scaleAction = 'decrease';
+    } else if (words.includes('move') || words.includes('shift') || words.includes('slide')) {
+      result.action = 'move';
+      if (words.includes('left')) result.position = 'left';
+      if (words.includes('right')) result.position = 'right';
+      if (words.includes('up') || words.includes('higher') || words.includes('top')) result.position = 'up';
+      if (words.includes('down') || words.includes('lower') || words.includes('bottom')) result.position = 'down';
+      if (words.includes('forward') || words.includes('ahead')) result.position = 'forward';
+      if (words.includes('back') || words.includes('backward')) result.position = 'back';
+
+      // If none of these generic directions triggered, it might be prepositional (handled below)
     } else if (words.includes('modify') || words.includes('change') || words.includes('make') || words.includes('set')) {
       result.action = 'modify';
     }
@@ -201,11 +224,19 @@ Output: { "commands": [ { "action": "place", "object": "dragon", "size": "large"
       }
     }
 
-    // Check for "above" or "on"
-    const aboveMatch = lowerText.match(/(?:above|on|on top of) (?:the |a |an )?([a-z ]+)/);
-    if (aboveMatch) {
-      result.position = 'above';
-      result.referenceObject = aboveMatch[1].trim();
+    // Check for prepositions handling ("above", "on top of", "near", "next to", etc)
+    const PREPOSITIONS = [
+      "on top of", "in front of", "next to", "left of", "right of",
+      "above", "on", "near", "beside", "behind", "below", "under", "to top of"
+    ];
+    const positionRegex = new RegExp(`(${PREPOSITIONS.join("|")}) (?:the |a |an )?([a-z ]+)`, "i");
+
+    const positionMatch = lowerText.match(positionRegex);
+    if (positionMatch) {
+      let pos = positionMatch[1].toLowerCase();
+      if (pos === "to top of") pos = "above"; // normalize
+      result.position = pos;
+      result.referenceObject = positionMatch[2].trim();
     }
 
     return { commands: [result] };

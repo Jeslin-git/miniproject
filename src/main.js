@@ -507,7 +507,7 @@ const spawnObject = async (type, props = {}) => {
         }
 
         // Apply position
-        if (props.position === 'above') {
+        if (typeof props.position === 'string' && props.position.length > 0) {
             // Find reference object
             let refObj = null;
             if (props.referenceObject) {
@@ -528,10 +528,31 @@ const spawnObject = async (type, props = {}) => {
                 const refBbox = new THREE.Box3().setFromObject(refObj);
                 const modelBbox = new THREE.Box3().setFromObject(model);
                 const modelSize = new THREE.Vector3();
+                const refSize = new THREE.Vector3();
                 modelBbox.getSize(modelSize);
+                refBbox.getSize(refSize);
 
-                // Account for height center offsets depending on geometry bounding volume
-                model.position.set(refObj.position.x, refBbox.max.y + (modelSize.y / 2) + 0.05, refObj.position.z);
+                const pos = props.position.toLowerCase();
+
+                if (pos === 'above' || pos === 'on' || pos === 'on top of') {
+                    model.position.set(refObj.position.x, refBbox.max.y + (modelSize.y / 2) + 0.05, refObj.position.z);
+                } else if (pos === 'below' || pos === 'under') {
+                    model.position.set(refObj.position.x, Math.max(modelSize.y / 2, refBbox.min.y - (modelSize.y / 2) - 0.05), refObj.position.z);
+                } else if (pos === 'near' || pos === 'next to' || pos === 'beside') {
+                    // Place it to the right by default
+                    model.position.set(refObj.position.x + refSize.x / 2 + modelSize.x / 2 + 0.5, refObj.position.y, refObj.position.z);
+                } else if (pos === 'left of') {
+                    model.position.set(refObj.position.x - refSize.x / 2 - modelSize.x / 2 - 0.5, refObj.position.y, refObj.position.z);
+                } else if (pos === 'right of') {
+                    model.position.set(refObj.position.x + refSize.x / 2 + modelSize.x / 2 + 0.5, refObj.position.y, refObj.position.z);
+                } else if (pos === 'in front of') {
+                    model.position.set(refObj.position.x, refObj.position.y, refObj.position.z + refSize.z / 2 + modelSize.z / 2 + 0.5);
+                } else if (pos === 'behind') {
+                    model.position.set(refObj.position.x, refObj.position.y, refObj.position.z - refSize.z / 2 - modelSize.z / 2 - 0.5);
+                } else {
+                    // Fallback to above
+                    model.position.set(refObj.position.x, refBbox.max.y + (modelSize.y / 2) + 0.05, refObj.position.z);
+                }
             } else {
                 model.position.set(Math.random() * 4 - 2, 2 + Math.random() * 2, Math.random() * 4 - 2);
             }
@@ -1180,8 +1201,33 @@ if (stackBtn) {
 }
 
 // --- 5b. MODIFY OBJECT DEFINITION ---
+// Helper to find the best target object for NLP commands
+const getTargetFromCommand = (cmd) => {
+    let targetObj = null;
+    if (cmd && cmd.object && !['unknown', 'it', 'this', 'selected', 'that', 'current'].includes(cmd.object.toLowerCase())) {
+        const searchName = cmd.object.toLowerCase().trim();
+        // 1. Check if selected object matches the requested type
+        if (selectedObject && (selectedObject.userData.type.includes(searchName) || searchName.includes(selectedObject.userData.type))) {
+            targetObj = selectedObject;
+        } else {
+            // 2. Find the last placed object of that type
+            for (let i = placedObjects.length - 1; i >= 0; i--) {
+                if (placedObjects[i].userData.type.includes(searchName) || searchName.includes(placedObjects[i].userData.type)) {
+                    targetObj = placedObjects[i];
+                    break;
+                }
+            }
+        }
+    }
+    // 3. Fallback: Selected object, or last placed object overall
+    if (!targetObj) {
+        targetObj = selectedObject || (placedObjects.length > 0 ? placedObjects[placedObjects.length - 1] : null);
+    }
+    return targetObj;
+};
+
 window.modifyCurrentObject = (cmd) => {
-    const targetObj = selectedObject || (placedObjects.length > 0 ? placedObjects[placedObjects.length - 1] : null);
+    const targetObj = getTargetFromCommand(cmd);
     if (!targetObj) return false;
 
     if (cmd.color) {
@@ -1262,6 +1308,102 @@ window.deleteCurrentObject = () => {
 
     triggerAutoSave();
     return true;
+};
+
+// --- 5d. SCALE/MOVE OBJECT DEFINITION ---
+window.scaleCurrentObject = (cmd) => {
+    const targetObj = getTargetFromCommand(cmd);
+    if (!targetObj) return false;
+
+    let factor = 1.0;
+    if (cmd.scaleAction === 'increase' || cmd.size === 'large') {
+        factor = 1.25;
+    } else if (cmd.scaleAction === 'decrease' || cmd.size === 'small') {
+        factor = 0.8;
+    } else {
+        return false;
+    }
+
+    targetObj.scale.multiplyScalar(factor);
+
+    if (selectedObject === targetObj) {
+        updateLampUI(); updateMaterialUI(); updateCarpetUI();
+    }
+
+    triggerAutoSave();
+    return true;
+};
+
+window.moveCurrentObject = (cmd) => {
+    const targetObj = getTargetFromCommand(cmd);
+    if (!targetObj) return false;
+
+    let moved = false;
+    const moveStep = 1.0;
+
+    // Simple relative movements
+    if (cmd.position === 'left') { targetObj.position.x -= moveStep; moved = true; }
+    else if (cmd.position === 'right') { targetObj.position.x += moveStep; moved = true; }
+    else if (cmd.position === 'up') { targetObj.position.y += moveStep; moved = true; }
+    else if (cmd.position === 'down') { targetObj.position.y -= moveStep; moved = true; }
+    else if (cmd.position === 'forward') { targetObj.position.z -= moveStep; moved = true; }
+    else if (cmd.position === 'back') { targetObj.position.z += moveStep; moved = true; }
+
+    // Relationships (above, near, etc)
+    if (cmd.referenceObject) {
+        let refObj = null;
+        const searchName = cmd.referenceObject.toLowerCase().trim();
+        for (let i = placedObjects.length - 1; i >= 0; i--) {
+            if (placedObjects[i] !== targetObj && (placedObjects[i].userData.type.includes(searchName) || searchName.includes(placedObjects[i].userData.type))) {
+                refObj = placedObjects[i];
+                break;
+            }
+        }
+
+        if (refObj) {
+            const refBbox = new THREE.Box3().setFromObject(refObj);
+            const modelBbox = new THREE.Box3().setFromObject(targetObj);
+            const modelSize = new THREE.Vector3();
+            const refSize = new THREE.Vector3();
+            modelBbox.getSize(modelSize);
+            refBbox.getSize(refSize);
+
+            const pos = (cmd.position || 'near').toLowerCase();
+
+            if (pos === 'above' || pos === 'on' || pos === 'on top of') {
+                targetObj.position.set(refObj.position.x, refBbox.max.y + (modelSize.y / 2) + 0.05, refObj.position.z);
+            } else if (pos === 'below' || pos === 'under') {
+                targetObj.position.set(refObj.position.x, Math.max(modelSize.y / 2, refBbox.min.y - (modelSize.y / 2) - 0.05), refObj.position.z);
+            } else if (pos === 'near' || pos === 'next to' || pos === 'beside') {
+                targetObj.position.set(refObj.position.x + refSize.x / 2 + modelSize.x / 2 + 0.5, refObj.position.y, refObj.position.z);
+            } else if (pos === 'left of') {
+                targetObj.position.set(refObj.position.x - refSize.x / 2 - modelSize.x / 2 - 0.5, refObj.position.y, refObj.position.z);
+            } else if (pos === 'right of') {
+                targetObj.position.set(refObj.position.x + refSize.x / 2 + modelSize.x / 2 + 0.5, refObj.position.y, refObj.position.z);
+            } else if (pos === 'in front of') {
+                targetObj.position.set(refObj.position.x, refObj.position.y, refObj.position.z + refSize.z / 2 + modelSize.z / 2 + 0.5);
+            } else if (pos === 'behind') {
+                targetObj.position.set(refObj.position.x, refObj.position.y, refObj.position.z - refSize.z / 2 - modelSize.z / 2 - 0.5);
+            }
+            moved = true;
+        }
+    }
+
+    if (moved) {
+        if (targetObj.userData.body) {
+            targetObj.userData.body.position.copy(targetObj.position);
+            targetObj.userData.body.velocity.set(0, 0, 0);
+        }
+        targetObj.userData.savedPosition = {
+            x: targetObj.position.x,
+            y: targetObj.position.y,
+            z: targetObj.position.z
+        };
+        triggerAutoSave();
+        return true;
+    }
+
+    return false;
 };
 
 // --- 6. VOICE SYSTEM ---
@@ -1382,6 +1524,12 @@ const processTextCommand = async (command) => {
                     } else if (cmd.action === 'modify') {
                         const success = window.modifyCurrentObject(cmd);
                         updateStatus(success ? "Modified properties" : "No object found to modify");
+                    } else if (cmd.action === 'scale') {
+                        const success = window.scaleCurrentObject(cmd);
+                        updateStatus(success ? "Scaled object" : "No object found to scale");
+                    } else if (cmd.action === 'move') {
+                        const success = window.moveCurrentObject(cmd);
+                        updateStatus(success ? "Moved object" : "No object found to move");
                     } else if (cmd.action === 'delete') {
                         let success = false;
                         if (!cmd.object || ['unknown', 'it', 'this', 'selected', 'that'].includes(cmd.object.toLowerCase())) {
@@ -1438,6 +1586,12 @@ const processTextCommand = async (command) => {
         } else if (cmd.action === 'modify') {
             const success = window.modifyCurrentObject(cmd);
             updateStatus(success ? "Modified properties" : "No object found to modify");
+        } else if (cmd.action === 'scale') {
+            const success = window.scaleCurrentObject(cmd);
+            updateStatus(success ? "Scaled object" : "No object found to scale");
+        } else if (cmd.action === 'move') {
+            const success = window.moveCurrentObject(cmd);
+            updateStatus(success ? "Moved object" : "No object found to move");
         } else if (cmd.action === 'delete') {
             let success = false;
             if (!cmd.object || ['unknown', 'it', 'this', 'selected', 'that'].includes(cmd.object.toLowerCase())) {

@@ -164,6 +164,20 @@ export class VoiceManager {
                     this.showMessage('No object found to modify');
                 }
                 processed = true;
+            } else if (cmd.action === 'scale') {
+                if (window.scaleCurrentObject) {
+                    const success = window.scaleCurrentObject(cmd);
+                    if (success) this.showMessage('Scaled object');
+                    else this.showMessage('No object found to scale');
+                    processed = true;
+                }
+            } else if (cmd.action === 'move') {
+                if (window.moveCurrentObject) {
+                    const success = window.moveCurrentObject(cmd);
+                    if (success) this.showMessage('Moved object');
+                    else this.showMessage('No object found to move');
+                    processed = true;
+                }
             }
         }
 
