@@ -6,7 +6,7 @@ import { loadModel, preloadModels } from './utils/modelLoader.js';
 import { split, parseClause, parseEnhanced } from './utils/voice.js';
 import { VoiceManager } from './utils/voiceManager.js';
 import { GeminiNLP } from '../scripts/geminiNLP.js';
-import { supabase } from './lib/supabase.js';
+import { apiFetch, authAPI } from './lib/api.js';
 
 
 // --- 1. CORE SETUP (THREE) ---
@@ -1639,40 +1639,31 @@ window.loadWorkspace = async () => {
     updateStatus("Loading Project...");
 
     try {
-        const { data: project, error } = await supabase
-            .from('projects')
-            .select('*')
-            .eq('id', currentProjectId)
-            .single();
+        const project = await apiFetch(`/api/projects/${currentProjectId}`);
 
-        if (error) throw error;
-        if (project) {
-            console.log('Project fetched from Supabase:', project.name);
-            const projectNameEl = document.getElementById('project-name');
-            if (projectNameEl) {
-                projectNameEl.textContent = project.name;
+        console.log('Project fetched:', project.name);
+        const projectNameEl = document.getElementById('project-name');
+        if (projectNameEl) {
+            projectNameEl.textContent = project.name;
+        }
+
+        if (project.data && project.data.objects) {
+            // Clear existing objects first to avoid duplicates on reload
+            placedObjects.forEach(obj => {
+                if (obj.userData.body) world.removeBody(obj.userData.body);
+                scene.remove(obj);
+            });
+            placedObjects = [];
+
+            console.log(`Spawning ${project.data.objects.length} objects...`);
+
+            for (const objData of project.data.objects) {
+                await spawnObject(objData.type, objData);
             }
 
-            // Load project data if available
-            if (project.data && project.data.objects) {
-                // Clear existing objects first to avoid duplicates on reload
-                placedObjects.forEach(obj => {
-                    if (obj.userData.body) world.removeBody(obj.userData.body);
-                    scene.remove(obj);
-                });
-                placedObjects = [];
-
-                console.log(`Spawning ${project.data.objects.length} objects...`);
-
-                // Spawn objects sequentially to maintain order and ensure physics bodies match positions
-                for (const objData of project.data.objects) {
-                    await spawnObject(objData.type, objData);
-                }
-
-                updateStatus("Project Loaded");
-            } else {
-                updateStatus("Empty Project Ready");
-            }
+            updateStatus("Project Loaded");
+        } else {
+            updateStatus("Empty Project Ready");
         }
     } catch (error) {
         console.error('Error loading project:', error);
@@ -1694,7 +1685,6 @@ const saveProject = async () => {
     if (!currentProjectId) return;
 
     const data = placedObjects.map(obj => {
-        // Use the user-placed snapshot position to avoid physics drift corrupting the save
         const pos = obj.userData.savedPosition || { x: obj.position.x, y: obj.position.y, z: obj.position.z };
         const rot = obj.userData.savedRotation || { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
         return {
@@ -1712,15 +1702,10 @@ const saveProject = async () => {
 
     try {
         console.log('Auto-saving project...');
-        const { error } = await supabase
-            .from('projects')
-            .update({
-                data: { objects: data },
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', currentProjectId);
-
-        if (error) throw error;
+        await apiFetch(`/api/projects/${currentProjectId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ data: { objects: data } }),
+        });
         updateStatus("Project Saved");
     } catch (error) {
         console.error('Error auto-saving:', error);
@@ -1738,15 +1723,11 @@ if (document.getElementById('save-btn')) {
 
 // Workspace Logout
 if (document.getElementById('logout-btn')) {
-    document.getElementById('logout-btn').onclick = async () => {
+    document.getElementById('logout-btn').onclick = () => {
         if (confirm('Are you sure you want to sign out?')) {
-            const { error } = await supabase.auth.signOut();
-            if (error) {
-                alert('Logout failed: ' + error.message);
-            } else {
-                localStorage.removeItem('currentProject');
-                window.location.href = '/#login';
-            }
+            authAPI.signOut();
+            localStorage.removeItem('currentProject');
+            window.location.href = '/#login';
         }
     };
 }

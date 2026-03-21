@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase.js';
+import { authAPI } from '../lib/api.js';
 
 // Authentication Pages (Login/Signup)
 export function renderLogin() {
@@ -37,7 +37,7 @@ export function renderSignup() {
                 <a class="auth-back-link" onclick="window.router.navigate('/')" href="#">← Back to Home</a>
                 <div class="auth-header">
                     <h1>Create an account</h1>
-                    <p>Join our gratitude community</p>
+                    <p>Join PyScape</p>
                 </div>
                 <form id="signup-form" class="auth-form">
                     <div class="form-group">
@@ -75,29 +75,16 @@ export function setupAuthHandlers() {
             const errorDiv = document.getElementById('login-error');
             const submitBtn = loginForm.querySelector('button[type="submit"]');
 
-            // Clear previous errors
             errorDiv.textContent = '';
             submitBtn.disabled = true;
             submitBtn.textContent = 'Signing in...';
 
-            console.log('Login attempt for:', email);
-
             try {
-                const { data, error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                });
-
-                if (error) {
-                    console.error('Login error:', error);
-                    errorDiv.textContent = error.message;
-                } else {
-                    console.log('Login successful, navigating to dashboard');
-                    window.location.hash = '#dashboard';
-                }
+                const { token, user } = await authAPI.login(email, password);
+                authAPI.saveSession(token, user);
+                window.location.hash = '#dashboard';
             } catch (err) {
-                console.error('Unexpected auth error:', err);
-                errorDiv.textContent = 'Auth error: ' + (err.message || 'Unknown error');
+                errorDiv.textContent = err.message;
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Sign in';
@@ -113,25 +100,15 @@ export function setupAuthHandlers() {
             const password = document.getElementById('signup-password').value;
             const errorDiv = document.getElementById('signup-error');
 
-            try {
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: {
-                        data: {
-                            full_name: name,
-                        }
-                    }
-                });
+            errorDiv.textContent = '';
 
-                if (error) {
-                    errorDiv.textContent = error.message;
-                } else {
-                    alert('Signup successful! Check your email for a verification link.');
-                    window.location.hash = '#login';
-                }
+            try {
+                const { token, user } = await authAPI.register(email, password, name);
+                authAPI.saveSession(token, user);
+                // Registered and logged in — go straight to dashboard
+                window.location.hash = '#dashboard';
             } catch (err) {
-                errorDiv.textContent = 'Auth error: ' + err.message;
+                errorDiv.textContent = err.message;
             }
         });
     }

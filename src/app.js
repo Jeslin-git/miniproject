@@ -3,9 +3,8 @@ import { Router } from './router.js';
 import { renderLogin, renderSignup, setupAuthHandlers } from './pages/auth.js';
 import { renderDashboard, setupDashboardHandlers, refreshDashboard } from './pages/dashboard.js';
 import { renderProfile, setupProfileHandlers } from './pages/profile.js';
-
-import { supabase } from './lib/supabase.js';
 import { renderLanding, setupLandingHandlers } from './pages/landing.js';
+import { authAPI } from './lib/api.js';
 
 const router = new Router();
 window.router = router;
@@ -27,20 +26,7 @@ router.register('/signup', () => {
 });
 
 router.register('/dashboard', async () => {
-    console.log('Navigating to dashboard...');
-    // Small delay to ensure session is updated if just logged in
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    const { data: { session }, error } = await supabase.auth.getSession();
-
-    if (error) {
-        console.error('Session check error:', error);
-        router.navigate('/login');
-        return;
-    }
-
-    if (!session) {
-        console.log('No session found on dashboard route, redirecting to login');
+    if (!authAPI.isLoggedIn()) {
         router.navigate('/login');
         return;
     }
@@ -48,9 +34,7 @@ router.register('/dashboard', async () => {
 });
 
 router.register('/profile', async () => {
-    console.log('Navigating to profile...');
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    if (!authAPI.isLoggedIn()) {
         router.navigate('/login');
         return;
     }
@@ -59,39 +43,25 @@ router.register('/profile', async () => {
 });
 
 router.register('/workspace', async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    if (!authAPI.isLoggedIn()) {
         router.navigate('/login');
         return;
     }
-    // Redirect to workspace HTML (use absolute path from root)
     window.location.href = '/workspace.html';
 });
 
 function renderPage(html) {
     const app = document.getElementById('app');
-    if (app) {
-        app.innerHTML = html;
-    }
+    if (app) app.innerHTML = html;
 }
 
 // Initialize app
 function initApp() {
     router.init();
-
-    // Global auth listener
-    supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT') {
-            console.log('User signed out, redirecting...');
-            localStorage.removeItem('currentProject');
-            window.location.hash = '#login';
-        }
-    });
 }
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
 } else {
-    // Use setTimeout to ensure DOM is fully ready
     setTimeout(initApp, 0);
 }

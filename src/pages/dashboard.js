@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase.js';
+import { authAPI, projectsAPI } from '../lib/api.js';
 
 // Files Dashboard Component
 export function renderDashboard(projects = []) {
@@ -70,48 +70,28 @@ function formatDate(timestamp) {
 }
 
 export async function refreshDashboard() {
-    console.log('Refreshing dashboard...');
     const app = document.getElementById('app');
 
     try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-        if (sessionError) throw sessionError;
-        if (!session) {
-            console.log('No session found, redirecting to login');
+        // Guard: check session
+        if (!authAPI.isLoggedIn()) {
             window.router.navigate('/login');
             return;
         }
 
-        const { data: projects, error } = await supabase
-            .from('projects')
-            .select('*')
-            .order('updated_at', { ascending: false });
-
-        if (error) {
-            console.error('Error fetching projects:', error);
-            if (app) {
-                app.innerHTML = `
-                    <div class="dashboard-page">
-                        <div class="error-container" style="padding: 40px; text-align: center;">
-                            <h2>Database Error</h2>
-                            <p>${error.message}</p>
-                            ${error.code === 'PGRST116' || error.message.includes('not found') ?
-                        '<p style="color: var(--figma-text-secondary); margin-top: 10px;">The "projects" table might be missing. Please check your Supabase migrations.</p>' : ''}
-                            <button class="btn-primary" onclick="window.location.reload()" style="margin-top: 20px;">Retry</button>
-                        </div>
-                    </div>
-                `;
-            }
-            return;
-        }
-
+        const projects = await projectsAPI.list();
         if (app) {
             app.innerHTML = renderDashboard(projects || []);
             setupDashboardHandlers();
         }
     } catch (err) {
-        console.error('Fatal dashboard error:', err);
+        console.error('Dashboard error:', err);
+        // If 401, token is invalid — force logout
+        if (err.message.includes('401') || err.message.toLowerCase().includes('token')) {
+            authAPI.signOut();
+            window.router.navigate('/login');
+            return;
+        }
         if (app) {
             app.innerHTML = `<div class="error-message" style="margin: 20px;">Failed to load dashboard: ${err.message}</div>`;
         }
@@ -119,17 +99,13 @@ export async function refreshDashboard() {
 }
 
 export function setupDashboardHandlers() {
-    console.log('Setting up dashboard handlers...');
-
     // New project button
     const newProjectBtn = document.getElementById('new-project-btn');
     if (newProjectBtn) {
         newProjectBtn.onclick = async (e) => {
             e.preventDefault();
             const name = prompt('Enter project name:', 'Untitled Project');
-            if (name && name.trim()) {
-                await createProject(name.trim());
-            }
+            if (name && name.trim()) await createProject(name.trim());
         };
     }
 
@@ -139,9 +115,7 @@ export function setupDashboardHandlers() {
         emptyStateBtn.onclick = async (e) => {
             e.preventDefault();
             const name = prompt('Enter project name:', 'Untitled Project');
-            if (name && name.trim()) {
-                await createProject(name.trim());
-            }
+            if (name && name.trim()) await createProject(name.trim());
         };
     }
 
@@ -175,16 +149,10 @@ export function setupDashboardHandlers() {
     // Logout
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
-        logoutBtn.onclick = async () => {
+        logoutBtn.onclick = () => {
             if (confirm('Are you sure you want to sign out?')) {
-                const { error } = await supabase.auth.signOut();
-                if (error) {
-                    console.error('Sign out error:', error);
-                    alert('Error signing out: ' + error.message);
-                } else {
-                    localStorage.removeItem('currentProject');
-                    window.location.hash = '#login';
-                }
+                authAPI.signOut();
+                window.location.hash = '#login';
             }
         };
     }
@@ -193,56 +161,33 @@ export function setupDashboardHandlers() {
 }
 
 async function fetchStats() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
+    const user = authAPI.getUser();
     const statsEl = document.getElementById('dashboard-stats');
-    if (statsEl) {
-        statsEl.textContent = `User: ${session.user.email}`;
+    if (statsEl && user) {
+        statsEl.textContent = `User: ${user.email}`;
     }
 }
 
 async function createProject(name) {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-
-        const { data, error } = await supabase
-            .from('projects')
-            .insert([{
-                name: name,
-                user_id: session.user.id,
-                data: { objects: [] }
-            }])
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        localStorage.setItem('currentProject', data.id);
+        const project = await projectsAPI.create(name);
+        localStorage.setItem('currentProject', project.id);
         window.location.href = 'workspace.html';
-    } catch (error) {
-        console.error('Error creating project:', error);
-        alert('Failed to create project.');
+    } catch (err) {
+        console.error('Error creating project:', err);
+        alert('Failed to create project: ' + err.message);
     }
 }
 
 async function deleteProject(projectId) {
     try {
-        const { error } = await supabase
-            .from('projects')
-            .delete()
-            .eq('id', projectId);
-
-        if (error) throw error;
-
+        await projectsAPI.delete(projectId);
         const currentProject = localStorage.getItem('currentProject');
         if (currentProject === projectId) localStorage.removeItem('currentProject');
-
         await refreshDashboard();
-    } catch (error) {
-        console.error('Error deleting project:', error);
-        alert('Failed to delete project.');
+    } catch (err) {
+        console.error('Error deleting project:', err);
+        alert('Failed to delete project: ' + err.message);
     }
 }
 

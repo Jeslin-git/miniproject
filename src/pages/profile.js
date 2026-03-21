@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase.js';
+import { authAPI, projectsAPI } from '../lib/api.js';
 
 // Profile Page Component
 export function renderProfile() {
@@ -18,15 +18,27 @@ export function renderProfile() {
 
 export function setupProfileHandlers() {
     const loadProfile = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        let user = authAPI.getUser();
 
-        const user = session.user;
-        const { data: projects } = await supabase
-            .from('projects')
-            .select('id')
-            .eq('user_id', user.id);
-        const projectCount = projects ? projects.length : 0;
+        // Refresh from API to get latest data
+        try {
+            const res = await authAPI.me();
+            user = res.user;
+            // Update cached user
+            localStorage.setItem('currentUser', JSON.stringify(user));
+        } catch (err) {
+            if (!user) {
+                window.router.navigate('/login');
+                return;
+            }
+        }
+
+        // Get project count
+        let projectCount = 0;
+        try {
+            const projects = await projectsAPI.list();
+            projectCount = projects.length;
+        } catch (_) { }
 
         const content = document.getElementById('profile-content');
         if (content) {
@@ -39,7 +51,7 @@ export function setupProfileHandlers() {
                     </div>
                     
                     <div class="profile-info">
-                        <h2>${user.user_metadata?.full_name || 'User'}</h2>
+                        <h2>${user.full_name || 'User'}</h2>
                         <p class="profile-email">${user.email || 'No email'}</p>
                     </div>
                 </div>
@@ -60,7 +72,7 @@ export function setupProfileHandlers() {
                     <div class="settings-list">
                         <div class="setting-item">
                             <label>Display Name</label>
-                            <input type="text" id="profile-name" value="${user.user_metadata?.full_name || ''}" placeholder="Your name" />
+                            <input type="text" id="profile-name" value="${user.full_name || ''}" placeholder="Your name" />
                             <button class="btn-secondary btn-small" id="save-name-btn">Save</button>
                         </div>
                         <div class="setting-item">
@@ -71,21 +83,12 @@ export function setupProfileHandlers() {
                     </div>
                 </div>
                 
-                <div class="profile-section">
-                    <h3>Danger Zone</h3>
-                    <div class="danger-zone">
-                        <p>Delete your account and all associated data</p>
-                        <button class="btn-danger" id="delete-account-btn">Delete Account</button>
-                    </div>
-                </div>
-                
                 <div class="profile-actions">
                     <button class="btn-secondary" onclick="window.router.navigate('/dashboard')">Back to Dashboard</button>
                     <button class="btn-primary" id="logout-profile-btn">Sign Out</button>
                 </div>
             `;
 
-            // Re-attach handlers
             setupDynamicHandlers();
         }
     };
@@ -94,32 +97,29 @@ export function setupProfileHandlers() {
         // Logout button
         const logoutBtn = document.getElementById('logout-profile-btn');
         if (logoutBtn) {
-            logoutBtn.onclick = async () => {
+            logoutBtn.onclick = () => {
                 if (confirm('Are you sure you want to sign out?')) {
-                    const { error } = await supabase.auth.signOut();
-                    if (error) {
-                        console.error('Sign out error:', error);
-                        alert('Error signing out: ' + error.message);
-                    } else {
-                        localStorage.removeItem('currentProject');
-                        window.location.hash = '#login';
-                    }
+                    authAPI.signOut();
+                    localStorage.removeItem('currentProject');
+                    window.location.hash = '#login';
                 }
             };
         }
 
-        // Save name (Supabase update)
+        // Save name
         const saveNameBtn = document.getElementById('save-name-btn');
         if (saveNameBtn) {
             saveNameBtn.onclick = async () => {
                 const nameInput = document.getElementById('profile-name');
                 const newName = nameInput.value.trim();
                 if (newName) {
-                    const { error } = await supabase.auth.updateUser({
-                        data: { full_name: newName }
-                    });
-                    if (error) alert(error.message);
-                    else alert('Profile updated!');
+                    try {
+                        const { user: updated } = await authAPI.updateMe(newName);
+                        localStorage.setItem('currentUser', JSON.stringify(updated));
+                        alert('Profile updated!');
+                    } catch (err) {
+                        alert('Error: ' + err.message);
+                    }
                 }
             };
         }
