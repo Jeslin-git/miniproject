@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createTable, createChair, createSofa, createArmchair, createOfficeChair, createBed, createLamp, createPlant, createCar, createFoodItem, createTool, createElectronics, createHuman, createDragon, createAnimal, createCarpet } from './utils/generators.js';
 import { world, CANNON } from './components/physics.js';
 import { loadModel, preloadModels } from './utils/modelLoader.js';
+import { normalizeAndAlignModel } from './utils/modelNormalizer.js';
 import { split, parseClause, parseEnhanced } from './utils/voice.js';
 import { VoiceManager } from './utils/voiceManager.js';
 import { GeminiNLP } from '../scripts/geminiNLP.js';
@@ -215,6 +216,10 @@ const startPreview = async (type) => {
     const normalizedType = type.toLowerCase().trim().split(' ')[0];
     const model = await createModelForType(normalizedType);
 
+    // Normalize scale and center perfectly before preview scaling
+    if (!model.userData.type) model.userData.type = normalizedType;
+    normalizeAndAlignModel(model, model.userData.type);
+
     // Base position and enlarge
     const bbox = new THREE.Box3().setFromObject(model);
     const size = new THREE.Vector3(); bbox.getSize(size);
@@ -251,7 +256,7 @@ let intersection = new THREE.Vector3();
  * The body will be added to the shared physics world and attached to model.userData.body
  */
 const addPhysicsBodyForModel = (model) => {
-    // Compute bounding box in world space
+    // Generate shape based on perfectly normalized geometry bounding box
     const bbox = new THREE.Box3().setFromObject(model);
     const size = new THREE.Vector3();
     bbox.getSize(size);
@@ -264,14 +269,23 @@ const addPhysicsBodyForModel = (model) => {
     const halfExtents = new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2);
     const shape = new CANNON.Box(halfExtents);
 
+    // Compute realistic dynamic mass (density = 20)
+    const volume = size.x * size.y * size.z;
+    const calculatedMass = Math.max(0.5, Math.min(200, volume * 20));
+
     const body = new CANNON.Body({
-        mass: 1, // dynamic
+        mass: calculatedMass, // dynamic
         position: new CANNON.Vec3(model.position.x, model.position.y, model.position.z),
         shape
     });
 
     body.angularDamping = 0.9;
     body.linearDamping = 0.6;
+
+    // Allow this specific body to sleep to prevent jitter
+    body.allowSleep = true;
+    body.sleepSpeedLimit = 0.1;
+    body.sleepTimeLimit = 1.0;
 
     world.addBody(body);
     model.userData.body = body;
@@ -478,6 +492,14 @@ const spawnObject = async (type, props = {}) => {
         }
     }
 
+    // Ensure model has proper userData type early for normalization
+    if (!model.userData.type) {
+        model.userData.type = finalType || type;
+    }
+
+    // Mathematical normalization happens BEFORE relative positioning or sizing
+    normalizeAndAlignModel(model, model.userData.type);
+
     // Apply properties if provided (from voice or cloud load)
     if (props) {
         // Apply color
@@ -496,7 +518,7 @@ const spawnObject = async (type, props = {}) => {
             const s = props.size.toLowerCase();
             if (s === 'small' || s === 'tiny') scale = 0.5;
             else if (s === 'large' || s === 'big' || s === 'huge') scale = 1.5;
-            model.scale.set(scale, scale, scale);
+            model.scale.multiplyScalar(scale); // MULTIPLY ensures normalized scale is respected
         } else if (props.scale) {
             model.scale.set(props.scale.x || 1, props.scale.y || 1, props.scale.z || 1);
         }
@@ -618,6 +640,10 @@ const spawnObject = async (type, props = {}) => {
     if (props.material) {
         model.userData.material = props.material;
     }
+
+    // Enforce grid snapping on X and Z before adding to scene and physics
+    model.position.x = Math.round(model.position.x / GRID_SIZE) * GRID_SIZE;
+    model.position.z = Math.round(model.position.z / GRID_SIZE) * GRID_SIZE;
 
     // Add to scene & physics
     scene.add(model);
@@ -776,6 +802,10 @@ renderer.domElement.addEventListener('pointermove', (e) => {
     if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
         const newPos = intersection.sub(dragOffset);
 
+        // Snap X and Z to the grid
+        newPos.x = Math.round(newPos.x / GRID_SIZE) * GRID_SIZE;
+        newPos.z = Math.round(newPos.z / GRID_SIZE) * GRID_SIZE;
+
         selectedObject.position.copy(newPos);
 
         // Sync physics body immediately
@@ -814,7 +844,7 @@ window.addEventListener('keydown', (e) => {
     if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'textarea') return;
 
     const rotStep = 0.15;
-    const moveStep = 0.2;
+    const moveStep = GRID_SIZE; // Snap to grid size
 
     if (e.key === 'q') rotateSelected(rotStep);
     if (e.key === 'e') rotateSelected(-rotStep);
@@ -837,6 +867,7 @@ window.addEventListener('keydown', (e) => {
         if (selectedObject.userData.body) {
             selectedObject.userData.body.position.copy(selectedObject.position);
             selectedObject.userData.body.velocity.set(0, 0, 0);
+            selectedObject.userData.body.wakeUp(); // Wake physics if user nudges object
         }
         selectedObject.userData.savedPosition = {
             x: selectedObject.position.x,
@@ -1393,6 +1424,7 @@ window.moveCurrentObject = (cmd) => {
         if (targetObj.userData.body) {
             targetObj.userData.body.position.copy(targetObj.position);
             targetObj.userData.body.velocity.set(0, 0, 0);
+            targetObj.userData.body.wakeUp();
         }
         targetObj.userData.savedPosition = {
             x: targetObj.position.x,
@@ -1834,6 +1866,11 @@ function disablePhysics(obj) {
     if (!obj?.userData?.body) return;
     const body = obj.userData.body;
     body.type = CANNON.Body.KINEMATIC;
+
+    // Ghost the body to prevent bulldozing during drags and restore
+    body.collisionFilterGroup = 0;
+    body.collisionFilterMask = 0;
+
     body.velocity.set(0, 0, 0);
     body.angularVelocity.set(0, 0, 0);
 }
@@ -1842,6 +1879,11 @@ function enablePhysics(obj) {
     if (!obj?.userData?.body) return;
     const body = obj.userData.body;
     body.type = CANNON.Body.DYNAMIC;
+
+    // Restore default tangibility
+    body.collisionFilterGroup = 1;
+    body.collisionFilterMask = -1;
+
     body.wakeUp();
 }
 
