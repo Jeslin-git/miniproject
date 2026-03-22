@@ -1,6 +1,6 @@
 // Main Application Entry Point
 import { Router } from './router.js';
-import { renderLogin, renderSignup, setupAuthHandlers } from './pages/auth.js';
+import { renderLogin, renderSignup, setupAuthHandlers, renderVerifyEmail, setupVerifyHandler } from './pages/auth.js';
 import { renderDashboard, setupDashboardHandlers, refreshDashboard } from './pages/dashboard.js';
 import { renderProfile, setupProfileHandlers } from './pages/profile.js';
 import { renderLanding, setupLandingHandlers } from './pages/landing.js';
@@ -23,6 +23,11 @@ router.register('/login', () => {
 router.register('/signup', () => {
     renderPage(renderSignup());
     setTimeout(setupAuthHandlers, 0);
+});
+
+router.register('/verify-email', () => {
+    renderPage(renderVerifyEmail());
+    setTimeout(setupVerifyHandler, 0);
 });
 
 router.register('/dashboard', async () => {

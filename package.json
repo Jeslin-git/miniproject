@@ -21,13 +21,11 @@
   },
   "homepage": "https://github.com/Jeslin-git/miniproject#readme",
   "dependencies": {
-    "@supabase/supabase-js": "^2.97.0",
     "cannon-es": "^0.20.0",
     "three": "^0.182.0",
     "three-orbit-controls": "^82.1.0"
   },
   "devDependencies": {
-    "supabase": "^2.76.12",
     "vite": "^7.3.0"
   }
 }

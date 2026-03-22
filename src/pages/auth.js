@@ -30,6 +30,51 @@ export function renderLogin() {
     `;
 }
 
+export function renderVerifyEmail() {
+    return `
+        <div class="auth-page">
+            <div class="auth-container animate-in" style="text-align: center; padding: 3rem 1rem;">
+                <h1 id="verify-title" style="margin-bottom: 1rem;">Verifying your email...</h1>
+                <p id="verify-message" style="margin-top: 1rem; color: #888; margin-bottom: 2rem;">Please wait while we confirm your email address.</p>
+                <div id="verify-actions" style="display: none;"></div>
+            </div>
+        </div>
+    `;
+}
+
+export async function setupVerifyHandler() {
+    const hash = window.location.hash;
+    const tokenMatch = hash.match(/token=([^&]+)/);
+    const title = document.getElementById('verify-title');
+    const message = document.getElementById('verify-message');
+    const actions = document.getElementById('verify-actions');
+
+    if (!tokenMatch) {
+        title.textContent = "Verification Failed";
+        title.style.color = "#ff4444";
+        message.textContent = "No verification token provided in the URL.";
+        actions.style.display = "block";
+        actions.innerHTML = '<button class="btn btn-secondary" onclick="window.location.hash=\'#login\'">Go to Login</button>';
+        return;
+    }
+
+    try {
+        const res = await authAPI.verifyEmail(tokenMatch[1]);
+        authAPI.saveSession(res.token, res.user);
+        title.textContent = "Email Verified!";
+        title.style.color = "#4CAF50";
+        message.textContent = "Your account is now active. You have been automatically logged in.";
+        actions.style.display = "block";
+        actions.innerHTML = '<button class="btn btn-primary" onclick="window.location.hash=\'#dashboard\'">Go to Dashboard</button>';
+    } catch (err) {
+        title.textContent = "Verification Failed";
+        title.style.color = "#ff4444";
+        message.textContent = err.message || "The verification link is invalid or has expired.";
+        actions.style.display = "block";
+        actions.innerHTML = '<button class="btn btn-secondary" onclick="window.location.hash=\'#login\'">Go to Login</button>';
+    }
+}
+
 export function renderSignup() {
     return `
         <div class="auth-page">
@@ -103,10 +148,16 @@ export function setupAuthHandlers() {
             errorDiv.textContent = '';
 
             try {
-                const { token, user } = await authAPI.register(email, password, name);
-                authAPI.saveSession(token, user);
-                // Registered and logged in — go straight to dashboard
-                window.location.hash = '#dashboard';
+                const res = await authAPI.register(email, password, name);
+                // Registered - show success message instead of logging in
+                signupForm.parentElement.innerHTML = `
+                    <div class="auth-success animate-in" style="text-align: center; padding: 2rem 0;">
+                        <h2 style="color: #4CAF50; margin-bottom: 1rem;">Check your email!</h2>
+                        <p style="margin-bottom: 1.5rem;">We've sent a verification link to <strong>${email}</strong>.</p>
+                        <p style="font-size: 0.9em; color: #888;">Please click the link to activate your account before signing in.</p>
+                        <button type="button" class="btn btn-secondary" onclick="window.location.hash='#login'" style="margin-top: 1.5rem;">Return to login</button>
+                    </div>
+                `;
             } catch (err) {
                 errorDiv.textContent = err.message;
             }

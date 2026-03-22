@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 
-dotenv.config({ path: path.join(process.cwd(), '../.env') });
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
