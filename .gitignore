@@ -10,7 +10,11 @@ build/
 
 # Environment
 .env
-.env.local
+.env.*
+*.env
+**/.env
+**/.env.*
+server/.env
 *.local
 
 # Logs

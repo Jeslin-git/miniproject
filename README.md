@@ -22,34 +22,22 @@ A 3D spatial web application with a NodeJS/Express backend, PostgreSQL database,
 
 ## 2. Environment Variables
 
-Create two `.env` files using following templates.
+The project includes two template environment files: `.env-example` (root) and `server/.env-example`.
 
 ### Root Directory (`/.env`)
-Create `.env` in the root folder with:
-```env
-PG_PASSWORD=your_postgres_password_here
-VITE_GEMINI_API_KEY=your_gemini_api_key
-VITE_POLY_PIZZA_API_KEY=your_poly_pizza_api_key
+Copy the template into a new `.env` file:
+```bash
+cp .env-example .env
 ```
+Update the API keys inside.
 
 ### Server Directory (`/server/.env`)
-Create `.env` inside the `server` folder with:
-```env
-PORT=5001
-JWT_SECRET=supersecretkey_change_in_production
-
-# PostgreSQL connection
-PG_HOST=localhost
-PG_PORT=5432
-PG_DATABASE=pyscape
-PG_USER=postgres
-PG_PASSWORD=your_postgres_password_here
-
-# Email Verification (Gmail App Password)
-EMAIL_USER=your_gmail_account@gmail.com
-EMAIL_PASS=your_16_char_app_password
+Copy the server template into a new `.env` file:
+```bash
+cd server
+cp .env-example .env
 ```
-*(Note: If `EMAIL_USER` is empty, registration emails will just print to the server console as a fallback for local testing).*
+Update your newly created `server/.env` file. We **strongly recommend Option A (Cloud Database)** for team projects, as everyone connects to the exact same Postgres database out-of-the-box!
 
 ## 3. Running the Backend
 
