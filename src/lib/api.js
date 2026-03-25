@@ -20,8 +20,11 @@ export async function apiFetch(path, options = {}) {
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {
-        const message = data?.message || `Request failed (${res.status})`;
-        throw new Error(message);
+        // Include the HTTP status in the message so callers can detect 401/403 reliably
+        const serverMsg = data?.message || `Request failed`;
+        const err = new Error(serverMsg);
+        err.status = res.status;
+        throw err;
     }
 
     return data;

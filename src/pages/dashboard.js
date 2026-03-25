@@ -86,14 +86,14 @@ export async function refreshDashboard() {
         }
     } catch (err) {
         console.error('Dashboard error:', err);
-        // If 401, token is invalid — force logout
-        if (err.message.includes('401') || err.message.toLowerCase().includes('token')) {
+        // Only force-logout on definitive auth failures (HTTP 401 or 403)
+        if (err.status === 401 || err.status === 403) {
             authAPI.signOut();
             window.router.navigate('/login');
             return;
         }
         if (app) {
-            app.innerHTML = `<div class="error-message" style="margin: 20px;">Failed to load dashboard: ${err.message}</div>`;
+            app.innerHTML = `<div class="error-message" style="margin: 20px;">Failed to load dashboard: ${err.message} <button onclick="window.refreshDashboard && window.refreshDashboard()" style="margin-left:12px;padding:4px 10px;cursor:pointer;">Retry</button></div>`;
         }
     }
 }
@@ -169,13 +169,30 @@ async function fetchStats() {
 }
 
 async function createProject(name) {
+    const newProjectBtn = document.getElementById('new-project-btn');
+    const emptyBtn = document.getElementById('empty-state-create-btn');
+    if (newProjectBtn) { newProjectBtn.disabled = true; newProjectBtn.textContent = 'Creating...'; }
+    if (emptyBtn) { emptyBtn.disabled = true; emptyBtn.textContent = 'Creating...'; }
     try {
         const project = await projectsAPI.create(name);
+        if (!project || !project.id) throw new Error('Server returned invalid project data');
         localStorage.setItem('currentProject', project.id);
         window.location.href = 'workspace.html';
     } catch (err) {
         console.error('Error creating project:', err);
-        alert('Failed to create project: ' + err.message);
+        // Re-enable buttons and show the error inline
+        if (newProjectBtn) { newProjectBtn.disabled = false; newProjectBtn.innerHTML = '<span>+</span> New Project'; }
+        if (emptyBtn) { emptyBtn.disabled = false; emptyBtn.textContent = 'Create Project'; }
+        // Show error in dashboard
+        const existingErr = document.getElementById('project-create-error');
+        if (existingErr) existingErr.remove();
+        const errEl = document.createElement('div');
+        errEl.id = 'project-create-error';
+        errEl.style.cssText = 'color:#ff6b6b;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.3);padding:10px 16px;border-radius:8px;margin:12px 0;font-size:0.9em;';
+        errEl.textContent = 'Failed to create project: ' + err.message;
+        const header = document.querySelector('.dashboard-header');
+        if (header) header.insertAdjacentElement('afterend', errEl);
+        setTimeout(() => errEl.remove(), 6000);
     }
 }
 

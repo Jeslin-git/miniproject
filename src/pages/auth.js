@@ -129,7 +129,11 @@ export function setupAuthHandlers() {
                 authAPI.saveSession(token, user);
                 window.location.hash = '#dashboard';
             } catch (err) {
-                errorDiv.textContent = err.message;
+                if (err.status === 404) {
+                    errorDiv.innerHTML = `No account found with that email address. <a href="#signup" style="color:#63b3ed;text-decoration:underline;">Create an account →</a>`;
+                } else {
+                    errorDiv.textContent = err.message;
+                }
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Sign in';

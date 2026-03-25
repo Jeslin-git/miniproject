@@ -61,22 +61,24 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
     const { name, data } = req.body;
 
+    if (name === undefined && data === undefined) {
+        return res.status(400).json({ message: 'Nothing to update: provide name or data' });
+    }
+
     try {
-        // Build dynamic update — only update fields provided
         const fields = [];
         const values = [];
-        let i = 1;
 
-        if (name !== undefined) { fields.push(`name = $${i++}`); values.push(name); }
-        if (data !== undefined) { fields.push(`data = $${i++}`); values.push(JSON.stringify(data)); }
-        fields.push(`updated_at = $${i++}`);
-        values.push(new Date().toISOString());
+        if (name !== undefined) { fields.push(`name = $${values.push(name)}`); }
+        if (data !== undefined) { fields.push(`data = $${values.push(JSON.stringify(data))}`); }
+        fields.push(`updated_at = $${values.push(new Date().toISOString())}`);
 
-        values.push(req.params.id);
-        values.push(req.user.id);
+        // WHERE clause uses the next two positional params
+        const idIdx = values.push(req.params.id);
+        const userIdx = values.push(req.user.id);
 
         const result = await pool.query(
-            `UPDATE projects SET ${fields.join(', ')} WHERE id = $${i++} AND user_id = $${i} RETURNING *`,
+            `UPDATE projects SET ${fields.join(', ')} WHERE id = $${idIdx} AND user_id = $${userIdx} RETURNING *`,
             values
         );
 
@@ -89,6 +91,7 @@ router.put('/:id', async (req, res) => {
         res.status(500).json({ message: 'Failed to update project' });
     }
 });
+
 
 // DELETE /api/projects/:id — delete a project
 router.delete('/:id', async (req, res) => {
