@@ -50,6 +50,12 @@ export const sendVerificationEmail = async (to, token) => {
         return true;
     } catch (error) {
         console.error('Error sending verification email:', error);
-        throw new Error('Failed to send verification email');
+        console.log('\n=========================================');
+        console.log('📧  EMAIL VERIFICATION FALLBACK (Mock Send)');
+        console.log('-----------------------------------------');
+        console.log(`To: ${to}`);
+        console.log(`Link: ${verificationLink}`);
+        console.log('=========================================\n');
+        return false;
     }
 };

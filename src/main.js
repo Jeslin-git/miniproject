@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createTable, createChair, createSofa, createArmchair, createOfficeChair, createBed, createLamp, createPlant, createCar, createFoodItem, createTool, createElectronics, createHuman, createDragon, createAnimal, createCarpet } from './utils/generators.js';
 import { world, CANNON } from './components/physics.js';
@@ -8,6 +8,8 @@ import { split, parseClause, parseEnhanced } from './utils/voice.js';
 import { VoiceManager } from './utils/voiceManager.js';
 import { GeminiNLP } from '../scripts/geminiNLP.js';
 import { apiFetch, authAPI } from './lib/api.js';
+import { DYNAMIC_ROOM_PRESETS } from './utils/roomPresets.js';
+
 
 
 // --- 1. CORE SETUP (THREE) ---
@@ -26,10 +28,11 @@ if (!viewport || !canvas) {
 const camera = new THREE.PerspectiveCamera(75, viewport.clientWidth / viewport.clientHeight, 0.1, 1000);
 camera.position.set(5, 5, 5);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 renderer.setSize(viewport.clientWidth, viewport.clientHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setClearColor(0x111111);
+renderer.setClearColor(0x111111, 1);
+renderer.xr.enabled = true;
 
 console.log('Renderer initialized:', renderer);
 console.log('Canvas size:', viewport.clientWidth, 'x', viewport.clientHeight);
@@ -279,8 +282,8 @@ const addPhysicsBodyForModel = (model) => {
         shape
     });
 
-    body.angularDamping = 0.9;
-    body.linearDamping = 0.6;
+    body.angularDamping = window.antigravityMode ? 0.85 : 0.9;
+    body.linearDamping = window.antigravityMode ? 0.85 : 0.6;
 
     // Allow this specific body to sleep to prevent jitter
     body.allowSleep = true;
@@ -411,6 +414,103 @@ if (mainSearch) {
         });
     });
 }
+
+window.spawnDynamicRoom = async (presetName, width, depth) => {
+    console.log(`Spawning dynamic room: ${presetName} (${width}x${depth})`);
+    const preset = DYNAMIC_ROOM_PRESETS[presetName.toLowerCase()] || DYNAMIC_ROOM_PRESETS.office;
+    
+    // Clear any existing structural components (floor/walls)
+    for (let i = placedObjects.length - 1; i >= 0; i--) {
+        const obj = placedObjects[i];
+        if (obj.userData.isStructure) {
+            if (obj.userData.body) {
+                world.removeBody(obj.userData.body);
+            }
+            scene.remove(obj);
+            placedObjects.splice(i, 1);
+        }
+    }
+
+    // 1. Spawn Floor
+    const floorHeight = 0.1;
+    const floorGeo = new THREE.BoxGeometry(width, floorHeight, depth);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.8 }); // wood texture tint
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.position.set(0, floorHeight / 2, 0);
+    floorMesh.userData.type = 'floor';
+    floorMesh.userData.isStructure = true;
+    
+    scene.add(floorMesh);
+    
+    // Add physics body for floor (mass = 0, static)
+    const floorHalfExtents = new CANNON.Vec3(width / 2, floorHeight / 2, depth / 2);
+    const floorShape = new CANNON.Box(floorHalfExtents);
+    const floorBody = new CANNON.Body({
+        mass: 0,
+        position: new CANNON.Vec3(0, floorHeight / 2, 0),
+        shape: floorShape
+    });
+    world.addBody(floorBody);
+    floorMesh.userData.body = floorBody;
+    placedObjects.push(floorMesh);
+
+    // 2. Spawn Walls
+    if (preset.walls) {
+        preset.walls.forEach((wallSpec, idx) => {
+            const x = wallSpec.xWeight * width;
+            const z = wallSpec.zWeight * depth;
+            const y = wallSpec.yOffset; // 1.5 height above baseline
+
+            const w = wallSpec.wWeight === 0.1 ? 0.1 : wallSpec.wWeight * width;
+            const d = wallSpec.dWeight === 0.1 ? 0.1 : wallSpec.dWeight * depth;
+            const h = 3.0; // standard height of 3 meters
+            
+            const wallGeo = new THREE.BoxGeometry(w, h, d);
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.9 });
+            const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+            wallMesh.position.set(x, y, z);
+            wallMesh.rotation.y = wallSpec.rotY;
+            wallMesh.userData.type = `wall_${idx}`;
+            wallMesh.userData.isStructure = true;
+            
+            scene.add(wallMesh);
+            
+            // Cannon body for wall (mass = 0, static)
+            const wallHalfExtents = new CANNON.Vec3(w / 2, h / 2, d / 2);
+            const wallShape = new CANNON.Box(wallHalfExtents);
+            const wallBody = new CANNON.Body({
+                mass: 0,
+                position: new CANNON.Vec3(x, y, z),
+                shape: wallShape
+            });
+            if (wallSpec.rotY) {
+                wallBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), wallSpec.rotY);
+            }
+            world.addBody(wallBody);
+            wallMesh.userData.body = wallBody;
+            placedObjects.push(wallMesh);
+        });
+    }
+
+    // 3. Spawn Furniture using calculated absolute coordinates
+    if (preset.furniture) {
+        for (const item of preset.furniture) {
+            const posX = item.xWeight * width;
+            const posZ = item.zWeight * depth;
+            const posY = item.yOffset;
+            
+            const itemProps = {
+                ...item.props,
+                position: { x: posX, y: posY, z: posZ }
+            };
+            
+            await spawnObject(item.type, itemProps);
+        }
+    }
+
+    updateStatus(`Spawned Dynamic ${presetName} Room (${width}x${depth})`);
+    triggerAutoSave();
+};
 
 // --- 4. SPAWNING LOGIC (Three + Cannon sync) ---
 const spawnObject = async (type, props = {}) => {
@@ -1536,6 +1636,42 @@ const processTextCommand = async (command) => {
         return;
     }
 
+    // Antigravity toggle matching
+    if (normalized.includes('zero gravity') || normalized.includes('antigravity on')) {
+        if (window.setAntigravityMode) window.setAntigravityMode(true);
+        updateStatus("Antigravity enabled");
+        return;
+    }
+    if (normalized.includes('antigravity off')) {
+        if (window.setAntigravityMode) window.setAntigravityMode(false);
+        updateStatus("Antigravity disabled");
+        return;
+    }
+
+    // Dynamic Room spawning matcher using lookarounds to extract numeric pairs (e.g. "10 by 8", "12x10")
+    // Matcher requires "create", "spawn", "build" or "make" followed by "office" or "living" and optional "room"
+    const isRoomCommand = /(?:create|spawn|build|make)\s+(?:a\s+)?(office|living)\s+room/i.test(normalized);
+    if (isRoomCommand) {
+        const presetMatch = normalized.match(/(office|living)/i);
+        const presetName = presetMatch ? presetMatch[1] : 'office';
+        
+        // Regex lookahead matching "10 by 8" or "12x10" or similar
+        const sizeRegex = /(?<width>\d+)(?=\s*(?:by|x)\s*\d+)\s*(?:by|x)\s*(?<depth>\d+)/i;
+        const sizeMatch = normalized.match(sizeRegex);
+        
+        let width = 10;
+        let depth = 8;
+        if (sizeMatch && sizeMatch.groups) {
+            width = parseFloat(sizeMatch.groups.width);
+            depth = parseFloat(sizeMatch.groups.depth);
+        }
+        
+        if (window.spawnDynamicRoom) {
+            await window.spawnDynamicRoom(presetName, width, depth);
+            return;
+        }
+    }
+
     // Use Gemini NLP for text commands if available
     if (window.geminiAPI) {
         try {
@@ -1785,25 +1921,57 @@ if (document.getElementById('reset-physics-btn')) {
     document.getElementById('reset-physics-btn').onclick = window.resetFallenObjects;
 }
 
-// --- 9. ANIMATION LOOP (PHYSICS + RENDER) ---
-let lastTime;
-function animate(time) {
-    requestAnimationFrame(animate);
-    if (lastTime !== undefined) {
-        const delta = (time - lastTime) / 1000;
-        world.step(1 / 60, delta, 3);
+window.antigravityMode = false;
+window.setAntigravityMode = (enabled) => {
+    window.antigravityMode = !!enabled;
+    if (window.antigravityMode) {
+        world.gravity.set(0, 0.2, 0); // slow upward drift
         placedObjects.forEach(obj => {
-            if (obj.userData.body) {
-                obj.position.copy(obj.userData.body.position);
-                obj.quaternion.copy(obj.userData.body.quaternion);
+            const body = obj.userData.body;
+            if (body && body.mass > 0) {
+                body.linearDamping = 0.85;
+                body.angularDamping = 0.85;
+                body.wakeUp();
             }
         });
+        updateStatus("Antigravity Mode: ON");
+    } else {
+        world.gravity.set(0, -9.82, 0); // normal Earth gravity
+        placedObjects.forEach(obj => {
+            const body = obj.userData.body;
+            if (body && body.mass > 0) {
+                body.linearDamping = 0.6;
+                body.angularDamping = 0.9;
+                body.wakeUp();
+            }
+        });
+        updateStatus("Antigravity Mode: OFF");
     }
-    lastTime = time;
+};
+
+// --- 9. ANIMATION LOOP (PHYSICS + RENDER) ---
+const clock = new THREE.Clock();
+function animate() {
+    const delta = Math.min(0.1, clock.getDelta());
+    world.step(1 / 60, delta, 3);
+    placedObjects.forEach(obj => {
+        const body = obj.userData.body;
+        if (body) {
+            // Enforce protective boundary ceiling at y = 6.0
+            if (window.antigravityMode && body.position.y > 6.0) {
+                body.position.y = 6.0;
+                if (body.velocity.y > 0) {
+                    body.velocity.y = 0;
+                }
+            }
+            obj.position.copy(body.position);
+            obj.quaternion.copy(body.quaternion);
+        }
+    });
     controls.update();
     renderer.render(scene, camera);
 }
-animate();
+renderer.setAnimationLoop(animate);
 
 // Preload common models
 preloadModels(['sofa', 'lamp', 'plant']);
@@ -1937,6 +2105,78 @@ window.onclick = (event) => {
         hideHelp();
     }
 };
+
+// --- 10. WEBXR INTEGRATION ---
+const arBadge = document.querySelector('.ar-badge');
+let xrSession = null;
+
+if (arBadge) {
+    if (navigator.xr) {
+        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+            if (supported) {
+                arBadge.addEventListener('click', toggleAR);
+            } else {
+                arBadge.style.opacity = '0.5';
+                arBadge.title = 'WebXR Immersive AR not supported on this device';
+                console.log('WebXR Immersive AR not supported on this device');
+            }
+        }).catch(err => {
+            console.error('Error checking WebXR support:', err);
+            arBadge.style.opacity = '0.5';
+        });
+    } else {
+        arBadge.style.opacity = '0.5';
+        arBadge.title = 'WebXR not supported in this browser';
+        console.log('WebXR not supported in this browser');
+    }
+}
+
+async function toggleAR() {
+    if (!xrSession) {
+        try {
+            xrSession = await navigator.xr.requestSession('immersive-ar', {
+                requiredFeatures: ['local']
+            });
+            
+            // Set session on renderer
+            await renderer.xr.setSession(xrSession);
+            arBadge.textContent = 'EXIT AR';
+            arBadge.classList.add('active');
+            
+            // XR adjustments: transparent clear color, hide room structure
+            renderer.setClearColor(0x000000, 0);
+            
+            placedObjects.forEach(obj => {
+                if (obj.userData.isStructure) {
+                    obj.visible = false;
+                }
+            });
+            
+            xrSession.addEventListener('end', onARSessionEnd);
+            console.log('WebXR Immersive AR session started');
+        } catch (err) {
+            console.error('Failed to start WebXR session:', err);
+            updateStatus('Failed to start AR');
+        }
+    } else {
+        await xrSession.end();
+    }
+}
+
+function onARSessionEnd() {
+    xrSession = null;
+    arBadge.textContent = 'LIVE AR';
+    arBadge.classList.remove('active');
+    
+    // Restore renderer clear color and structural visibility
+    renderer.setClearColor(0x111111, 1);
+    placedObjects.forEach(obj => {
+        if (obj.userData.isStructure) {
+            obj.visible = true;
+        }
+    });
+    console.log('WebXR Immersive AR session ended');
+}
 
 // --- INITIALIZATION ---
 console.log('Workspace main.js loaded. Triggering load...');

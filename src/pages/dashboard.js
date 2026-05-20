@@ -1,7 +1,59 @@
 import { authAPI, projectsAPI } from '../lib/api.js';
 
+let currentPage = 1;
+let currentProjects = [];
+
 // Files Dashboard Component
 export function renderDashboard(projects = []) {
+    currentProjects = projects;
+    const pageSize = window.innerWidth < 768 ? 4 : 6;
+    const totalPages = Math.max(1, Math.ceil(projects.length / pageSize));
+
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const startIdx = (currentPage - 1) * pageSize;
+    const endIdx = startIdx + pageSize;
+    const paginatedProjects = projects.slice(startIdx, endIdx);
+
+    const projectCardsHTML = paginatedProjects.map(project => `
+        <div class="project-card" data-project-id="${project.id}">
+            <div class="project-card-header">
+                <div class="project-icon">📦</div>
+                <button class="project-delete" data-project-id="${project.id}" title="Delete">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="project-card-body">
+                <h3 class="project-name">${project.name}</h3>
+                <p class="project-meta">Modified ${formatDate(project.updated_at)}</p>
+            </div>
+        </div>
+    `).join('');
+
+    let paginationHTML = '';
+    if (projects.length > 0) {
+        paginationHTML = `
+            <div class="dashboard-pagination" id="dashboard-pagination">
+                <button class="pagination-btn" id="prev-page-btn" ${currentPage === 1 ? 'disabled' : ''} aria-label="Previous Page">
+                    &larr; Prev
+                </button>
+                <div class="pagination-pages" id="pagination-pages">
+                    ${Array.from({ length: totalPages }, (_, i) => i + 1).map(page => `
+                        <button class="page-num-btn ${page === currentPage ? 'active' : ''}" data-page="${page}">
+                            ${page}
+                        </button>
+                    `).join('')}
+                </div>
+                <button class="pagination-btn" id="next-page-btn" ${currentPage === totalPages ? 'disabled' : ''} aria-label="Next Page">
+                    Next &rarr;
+                </button>
+            </div>
+        `;
+    }
+
     return `
         <div class="dashboard-page">
             <div class="dashboard-header">
@@ -27,22 +79,7 @@ export function renderDashboard(projects = []) {
                 </div>
             </div>
             <div class="projects-grid" id="projects-grid">
-                ${projects.map(project => `
-                    <div class="project-card" data-project-id="${project.id}">
-                        <div class="project-card-header">
-                            <div class="project-icon">📦</div>
-                            <button class="project-delete" data-project-id="${project.id}" title="Delete">
-                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                    <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                </svg>
-                            </button>
-                        </div>
-                        <div class="project-card-body">
-                            <h3 class="project-name">${project.name}</h3>
-                            <p class="project-meta">Modified ${formatDate(project.updated_at)}</p>
-                        </div>
-                    </div>
-                `).join('')}
+                ${projectCardsHTML}
                 ${projects.length === 0 ? `
                     <div class="empty-state">
                         <div class="empty-icon">📁</div>
@@ -52,6 +89,7 @@ export function renderDashboard(projects = []) {
                     </div>
                 ` : ''}
             </div>
+            ${paginationHTML}
         </div>
     `;
 }
@@ -157,6 +195,42 @@ export function setupDashboardHandlers() {
         };
     }
 
+    // Pagination click handlers
+    const prevBtn = document.getElementById('prev-page-btn');
+    if (prevBtn) {
+        prevBtn.onclick = async (e) => {
+            e.preventDefault();
+            if (currentPage > 1) {
+                currentPage--;
+                await refreshDashboard();
+            }
+        };
+    }
+
+    const nextBtn = document.getElementById('next-page-btn');
+    if (nextBtn) {
+        nextBtn.onclick = async (e) => {
+            e.preventDefault();
+            const pageSize = window.innerWidth < 768 ? 4 : 6;
+            const totalPages = Math.max(1, Math.ceil(currentProjects.length / pageSize));
+            if (currentPage < totalPages) {
+                currentPage++;
+                await refreshDashboard();
+            }
+        };
+    }
+
+    document.querySelectorAll('.page-num-btn').forEach(btn => {
+        btn.onclick = async (e) => {
+            e.preventDefault();
+            const page = parseInt(btn.dataset.page);
+            if (page && page !== currentPage) {
+                currentPage = page;
+                await refreshDashboard();
+            }
+        };
+    });
+
     fetchStats();
 }
 
@@ -213,3 +287,16 @@ export function openProject(projectId) {
     localStorage.setItem('currentProject', projectId);
     window.location.href = 'workspace.html';
 }
+
+// Re-render when crossing 768px mobile/desktop boundary
+let isMobileLayout = window.innerWidth < 768;
+window.addEventListener('resize', () => {
+    const newIsMobile = window.innerWidth < 768;
+    if (newIsMobile !== isMobileLayout) {
+        isMobileLayout = newIsMobile;
+        const dashboardPage = document.querySelector('.dashboard-page');
+        if (dashboardPage) {
+            refreshDashboard().catch(err => console.error('Error refreshing dashboard on resize:', err));
+        }
+    }
+});
