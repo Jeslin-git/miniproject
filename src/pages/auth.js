@@ -13,11 +13,11 @@ export function renderLogin() {
                 <form id="login-form" class="auth-form">
                     <div class="form-group">
                         <label for="login-email">Email</label>
-                        <input type="email" id="login-email" placeholder="name@company.com" required>
+                        <input type="email" id="login-email" autocomplete="username" placeholder="name@company.com" required>
                     </div>
                     <div class="form-group">
                         <label for="login-password">Password</label>
-                        <input type="password" id="login-password" placeholder="••••••••" required>
+                        <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••" required>
                     </div>
                     <div id="login-error" class="error-message"></div>
                     <button type="submit" class="btn btn-primary auth-submit">Sign in</button>
@@ -87,15 +87,15 @@ export function renderSignup() {
                 <form id="signup-form" class="auth-form">
                     <div class="form-group">
                         <label for="signup-name">Full Name</label>
-                        <input type="text" id="signup-name" placeholder="John Doe" required>
+                        <input type="text" id="signup-name" autocomplete="name" placeholder="John Doe" required>
                     </div>
                     <div class="form-group">
                         <label for="signup-email">Email</label>
-                        <input type="email" id="signup-email" placeholder="name@company.com" required>
+                        <input type="email" id="signup-email" autocomplete="username" placeholder="name@company.com" required>
                     </div>
                     <div class="form-group">
                         <label for="signup-password">Password</label>
-                        <input type="password" id="signup-password" placeholder="••••••••" required>
+                        <input type="password" id="signup-password" autocomplete="new-password" placeholder="••••••••" required>
                     </div>
                     <div id="signup-error" class="error-message"></div>
                     <button type="submit" class="btn btn-primary auth-submit">Create account</button>
@@ -153,7 +153,6 @@ export function setupAuthHandlers() {
 
             try {
                 const res = await authAPI.register(email, password, name);
-                // Registered - show success message instead of logging in
                 signupForm.parentElement.innerHTML = `
                     <div class="auth-success animate-in" style="text-align: center; padding: 2rem 0;">
                         <h2 style="color: #4CAF50; margin-bottom: 1rem;">Check your email!</h2>
